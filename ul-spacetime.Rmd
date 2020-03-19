@@ -1,0 +1,171 @@
+---
+title: "Dynamics of aquatic and soil-derived bacteria in a temperate lake"
+author: "Nathan I. Wisnoski and Jay T. Lennon"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  pdf_document:
+    fig_caption: yes
+    keep_tex: yes
+  word_document: default
+header-includes:
+- \usepackage{array}
+- \usepackage{graphics}
+---
+
+
+# Initial Setup
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.align = "center",
+  message = FALSE,
+  warning = 'hide')
+```
+
+First, we'll load the packages we'll need for the analysis, as well as some other functions.
+```{r packages, results='hide'}
+# Import Required Packages
+library("png")
+library("grid")
+library("tidyverse")   
+library("vegan")
+library("viridis")
+library("cowplot")
+library("ggrepel")
+library("iNEXT")
+library("broom")
+library("ggpmisc")
+library("pander")
+library("lubridate")
+library("betapart")
+library("adespatial")
+library("VennDiagram")
+
+source("bin/mothur_tools.R")
+se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
+```
+
+Next, we'll set the aesthetics of the figures we will produce. 
+```{r figure_setup}
+my.cols <- RColorBrewer::brewer.pal(n = 4, name = "Greys")[3:4]
+
+# Set theme for figures in the paper
+theme_set(theme_classic() + 
+  theme(axis.title = element_text(size = 16),
+        axis.title.x = element_text(margin = margin(t = 15, b = 15)),
+        axis.title.y = element_text(margin = margin(l = 15, r = 15)),
+        axis.text = element_text(size = 14),
+        axis.text.x = element_text(margin = margin(t = 5)),
+        axis.text.y = element_text(margin = margin(r = 5)),
+        #axis.line.x = element_line(size = 1),
+        #axis.line.y = element_line(size = 1),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        axis.ticks.x = element_line(size = 1),
+        axis.ticks.y = element_line(size = 1),
+        axis.ticks.length = unit(.1, "in"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+        legend.title = element_blank(),
+        legend.text = element_text(size = 14),
+        strip.text = element_text(size = 14),
+        strip.background = element_blank()
+        ))
+```
+
+## Import Data
+Here, we read in the processed sequence files from mothur (shared and taxonomy) and a design of the sampling. We also load in the environmental data. We then remove the mock community from the dataset and ensure the the design and OTU table are aligned by row.
+```{r}
+# Define Inputs
+# Design = general design file for experiment
+# shared = OTU table from mothur with sequence similarity clustering
+# Taxonomy = Taxonomic information for each OTU
+design <- "data/UL.design.txt"
+shared <- "data/ul_resgrad.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.pick.opti_mcc.shared"
+taxon  <- "data/ul_resgrad.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.pick.opti_mcc.0.03.cons.taxonomy"
+
+# Import Design
+design <- read.delim(design, header=T, row.names=1)
+
+# Import Shared Files
+OTUs <- read.otu(shared = shared, cutoff = "0.03")    # 97% Similarity
+
+# Import Taxonomy
+OTU.tax <- read.tax(taxonomy = taxon, format = "rdp")
+
+#OTUs <- OTUs[str_which(rownames(OTUs), "RG"),]
+OTUs <- OTUs[-which(rownames(OTUs) == "RGMockComm"),]
+
+OTUs <- rrarefy(OTUs, min(rowSums(OTUs)))
+OTUs.REL <- decostand(OTUs, "total")
+```
+
+# Are the "persistent" reservoir taxa really representative? Look over time...
+```{r time_series, fig.asp=1}
+# Subset to just the time series sites
+UL.ts.OTUs <- OTUs[str_which(rownames(OTUs), "UL"),]
+
+# make sure OTU table matches up with design order
+UL.ts.design <- read_csv("data/UL_timeseries_design.csv")
+UL.ts.OTUs <- UL.ts.OTUs[match(UL.ts.design$sample.name, rownames(UL.ts.OTUs)),]
+
+# separate RNA and DNA dynamics
+UL.ts.OTUs.RNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "RNA"),], method = "total")
+UL.ts.OTUs.DNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "DNA"),], method = "total")
+
+UL.ts.OTUs.DNA.PA <- decostand(UL.ts.OTUs.DNA, "pa")
+UL.ts.OTUs.RNA.PA <- decostand(UL.ts.OTUs.RNA, "pa")
+
+env.ts.data <- read.table("data/ul-seedbank.env.txt", sep="\t", header=TRUE)
+env.ts.data$date <- as.Date(parse_date_time(env.ts.data$date, "m d y"))
+env.ts.data$doc[which(env.ts.data$doc == "**")] <- NA
+env.ts.data$doc <- as.numeric(env.ts.data$doc)
+summary(env.ts.data)
+UL.ts.design <- left_join(UL.ts.design, env.ts.data[,c("sample.id", "date")])
+env.ts.data <- env.ts.data[-which(!(env.ts.data$date %in% UL.ts.design$date)),]
+```
+
+
+```{r}
+soil.sites <- OTUs[str_which(rownames(OTUs), "Soil"),]
+in.soils <- soil.sites[,which(colSums(soil.sites) > 0)]
+
+soil.taxa <- colnames(in.soils)
+nonsoil.taxa <- colnames(soil.sites[,which(colSums(soil.sites) == 0)])
+
+length(soil.taxa) + length(nonsoil.taxa) == ncol(OTUs)
+
+max.abund.in.soils <- apply(decostand(soil.sites, "total"), MARGIN = 2, max)
+common.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils >= 0.001)])
+rare.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils < 0.001)])
+length(common.in.soils) + length(rare.in.soils) == ncol(OTUs)
+
+# pull out time series of taxa in soils
+UL.ts.toplot.RNA <- UL.ts.OTUs.RNA[,which(colMeans(UL.ts.OTUs.DNA.PA) > .2)] # present in half samples
+
+OTUs.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% soil.taxa)]
+
+# pull out taxa not detected in soils
+OTUs.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% nonsoil.taxa)]
+
+ncol(OTUs.in.soil) + ncol(OTUs.not.in.soil) == ncol(UL.ts.toplot.RNA)
+
+cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.in.soil) %>% as_tibble() %>% 
+  gather(-sample.name, -sample.type, -sample.id, -date, key = OTU, value = rel_abund) %>% 
+  mutate(soils = ifelse(OTU %in% nonsoil.taxa, "Absent from soils",
+                   ifelse(OTU %in% common.in.soils, "Common in soils", "Rare in soils"))) %>% 
+  ggplot(aes(x = date, y = rel_abund + 1e-4, group = OTU)) +
+  geom_point(alpha = .1) + 
+  geom_line(stat = "smooth", method = "loess", color = "blue",
+            alpha = 0.5, span = .5, se = F) +
+  geom_vline(aes(xintercept = as_date("2013-07-15"))) +
+  scale_y_log10() + 
+  scale_x_date(labels = scales::date_format(format = "%b %y")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~soils, ncol = 1) +
+  labs(x = "",
+       y = "Relative abundance")
+  
+  
+```
+Many of them do appear to track the seasons quite well, suggesting there could be a seasonality component to the role of terrestrial inputs into the reservoir. 
