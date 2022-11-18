@@ -12,7 +12,6 @@ header-includes:
 - \usepackage{graphics}
 ---
 
-
 # Initial Setup
 
 ```{r setup, echo=FALSE}
@@ -24,29 +23,21 @@ knitr::opts_chunk$set(
 ```
 
 First, we'll load the packages we'll need for the analysis, as well as some other functions.
+
 ```{r packages, results='hide'}
 # Import Required Packages
-library("png")
-library("grid")
-library("tidyverse")   
-library("vegan")
-library("viridis")
-library("cowplot")
-library("ggrepel")
-library("iNEXT")
-library("broom")
-library("ggpmisc")
-library("pander")
-library("lubridate")
-library("betapart")
-library("adespatial")
-library("VennDiagram")
+
+library(tidyverse)   
+library(vegan)
+library(viridis)
+library(lubridate)
 
 source("bin/mothur_tools.R")
 se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
 ```
 
-Next, we'll set the aesthetics of the figures we will produce. 
+Next, we'll set the aesthetics of the figures we will produce.
+
 ```{r figure_setup}
 my.cols <- RColorBrewer::brewer.pal(n = 4, name = "Greys")[3:4]
 
@@ -62,10 +53,10 @@ theme_set(theme_classic() +
         #axis.line.y = element_line(size = 1),
         axis.line.x = element_blank(),
         axis.line.y = element_blank(),
-        axis.ticks.x = element_line(size = 1),
-        axis.ticks.y = element_line(size = 1),
+        axis.ticks.x = element_line(linewidth = 1),
+        axis.ticks.y = element_line(linewidth = 1),
         axis.ticks.length = unit(.1, "in"),
-        panel.border = element_rect(color = "black", fill = NA, size = 1.5),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 1.5),
         legend.title = element_blank(),
         legend.text = element_text(size = 14),
         strip.text = element_text(size = 14),
@@ -74,7 +65,9 @@ theme_set(theme_classic() +
 ```
 
 ## Import Data
+
 Here, we read in the processed sequence files from mothur (shared and taxonomy) and a design of the sampling. We also load in the environmental data. We then remove the mock community from the dataset and ensure the the design and OTU table are aligned by row.
+
 ```{r}
 # Define Inputs
 # Design = general design file for experiment
@@ -101,6 +94,7 @@ OTUs.REL <- decostand(OTUs, "total")
 ```
 
 # Are the "persistent" reservoir taxa really representative? Look over time...
+
 ```{r time_series, fig.asp=1}
 # Subset to just the time series sites
 UL.ts.OTUs <- OTUs[str_which(rownames(OTUs), "UL"),]
@@ -124,7 +118,6 @@ summary(env.ts.data)
 UL.ts.design <- left_join(UL.ts.design, env.ts.data[,c("sample.id", "date")])
 env.ts.data <- env.ts.data[-which(!(env.ts.data$date %in% UL.ts.design$date)),]
 ```
-
 
 ```{r}
 soil.sites <- OTUs[str_which(rownames(OTUs), "Soil"),]
@@ -150,14 +143,15 @@ OTUs.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% nonso
 
 ncol(OTUs.in.soil) + ncol(OTUs.not.in.soil) == ncol(UL.ts.toplot.RNA)
 
-cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.in.soil) %>% as_tibble() %>% 
+otu_trends_to_plot <- cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.in.soil) %>% as_tibble() %>% 
   gather(-sample.name, -sample.type, -sample.id, -date, key = OTU, value = rel_abund) %>% 
   mutate(soils = ifelse(OTU %in% nonsoil.taxa, "Absent from soils",
-                   ifelse(OTU %in% common.in.soils, "Common in soils", "Rare in soils"))) %>% 
+                   ifelse(OTU %in% common.in.soils, "Common in soils", "Rare in soils")))
+otu_trends_to_plot %>% 
   ggplot(aes(x = date, y = rel_abund + 1e-4, group = OTU)) +
   geom_point(alpha = .1) + 
-  geom_line(stat = "smooth", method = "loess", color = "blue",
-            alpha = 0.5, span = .5, se = F) +
+  geom_line(color = "blue",
+            alpha = 0.5) +
   geom_vline(aes(xintercept = as_date("2013-07-15"))) +
   scale_y_log10() + 
   scale_x_date(labels = scales::date_format(format = "%b %y")) +
@@ -168,4 +162,23 @@ cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.i
   
   
 ```
-Many of them do appear to track the seasons quite well, suggesting there could be a seasonality component to the role of terrestrial inputs into the reservoir. 
+
+Many of them do appear to track the seasons quite well, suggesting there could be a seasonality component to the role of terrestrial inputs into the reservoir.
+
+```{r}
+otu_trends_to_plot %>% 
+  group_by(OTU) %>% 
+  filter(mean(rel_abund) > 1e-3) %>% 
+  ggplot(aes(x = date, y = rel_abund + 1e-4, group = OTU, color = soils)) +
+  geom_point(alpha = .1) + 
+  geom_line(color = "blue",
+            alpha = 0.5) +
+  geom_line(stat = "smooth", se = FALSE, span = 0.5) +
+  geom_vline(aes(xintercept = as_date("2013-07-15"))) +
+  scale_y_log10() + 
+  scale_x_date(labels = scales::date_format(format = "%b %y")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  facet_wrap(~OTU) +
+  labs(x = "",
+       y = "Relative abundance")
+```
