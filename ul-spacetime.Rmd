@@ -3,10 +3,12 @@ title: "Dynamics of aquatic and soil-derived bacteria in a temperate lake"
 author: "Nathan I. Wisnoski and Jay T. Lennon"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
+  html_document:
+    df_print: paged
+  word_document: default
   pdf_document:
     fig_caption: yes
     keep_tex: yes
-  word_document: default
 header-includes:
 - \usepackage{array}
 - \usepackage{graphics}
@@ -53,10 +55,10 @@ theme_set(theme_classic() +
         #axis.line.y = element_line(size = 1),
         axis.line.x = element_blank(),
         axis.line.y = element_blank(),
-        axis.ticks.x = element_line(linewidth = 1),
-        axis.ticks.y = element_line(linewidth = 1),
+        axis.ticks.x = element_line(size = 1),
+        axis.ticks.y = element_line(size= 1),
         axis.ticks.length = unit(.1, "in"),
-        panel.border = element_rect(color = "black", fill = NA, linewidth = 1.5),
+        panel.border = element_rect(color = "black", fill = NA, size =1.5),
         legend.title = element_blank(),
         legend.text = element_text(size = 14),
         strip.text = element_text(size = 14),
@@ -107,7 +109,7 @@ UL.ts.OTUs <- UL.ts.OTUs[match(UL.ts.design$sample.name, rownames(UL.ts.OTUs)),]
 UL.ts.OTUs.RNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "RNA"),], method = "total")
 UL.ts.OTUs.DNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "DNA"),], method = "total")
 
-UL.ts.OTUs.DNA.PA <- decostand(UL.ts.OTUs.DNA, "pa")
+UL.ts.OTUs.DNA.PA <- decostand(UL.ts.OTUs.DNA + UL.ts.OTUs.RNA, "pa")
 UL.ts.OTUs.RNA.PA <- decostand(UL.ts.OTUs.RNA, "pa")
 
 env.ts.data <- read.table("data/ul-seedbank.env.txt", sep="\t", header=TRUE)
@@ -182,3 +184,39 @@ otu_trends_to_plot %>%
   labs(x = "",
        y = "Relative abundance")
 ```
+
+
+
+
+New chunk to try some graphs
+```{r}
+RGSoil.OTUs <- OTUs[str_which(rownames(OTUs), "RGSoil"),]
+
+SB.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
+head(SB.OTUs[,1:10])
+
+#create vector for seed bank richness
+
+SB.richness <- rowSums(SB.OTUs.PA)
+
+plot(SB.richness, type = "l")
+
+#creating matrix of all OTUs present in soil across the three samples
+
+RGSoil.OTUs.PA<- t(decostand(colSums(RGSoil.OTUs), method = "pa"))
+
+#Applying function to create matrix with OTUs only in soil
+
+SBrow1 <- SB.OTUs.PA[1,]
+SB.Soil.PA<- apply(SB.OTUs.PA, 1, FUN= function(x){RGSoil.OTUs.PA+ x -1})
+SB.Soil.PA<-t(SB.Soil.PA>0)*1
+
+#getting SB soil richness value
+
+SB.Soil.richness <- rowSums(SB.Soil.PA)
+
+#plot rel .abundance
+
+plot(SB.Soil.richness/SB.richness, type = "l")
+```
+
