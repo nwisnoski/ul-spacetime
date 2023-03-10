@@ -223,3 +223,18 @@ plot(SB.Soil.richness/SB.richness, type = "l")
   
 ```
 
+
+
+#Transforming proportions data into a table form
+```{r}
+
+#making a data frame for proportion of soil OTUs in SB
+
+SB.Soil.Prop <- tibble(sample.id= env.ts.data$sample.id, date= env.ts.data$date, Soil.Prop= SB.Soil.richness/SB.richness)
+
+#plotting proportion over time
+
+ggplot(SB.Soil.Prop, aes(x= date, y= Soil.Prop))+
+  geom_smooth()
+```
+
