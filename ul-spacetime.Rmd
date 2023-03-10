@@ -193,7 +193,7 @@ New chunk to try some graphs
 RGSoil.OTUs <- OTUs[str_which(rownames(OTUs), "RGSoil"),]
 
 SB.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
-head(SB.OTUs[,1:10])
+head(SB.OTUs.PA[,1:10])
 
 #create vector for seed bank richness
 
@@ -218,5 +218,8 @@ SB.Soil.richness <- rowSums(SB.Soil.PA)
 #plot rel .abundance
 
 plot(SB.Soil.richness/SB.richness, type = "l")
+
+
+  
 ```
 
