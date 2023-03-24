@@ -1,6 +1,6 @@
 ---
 title: "Dynamics of aquatic and soil-derived bacteria in a temperate lake"
-author: "Nathan I. Wisnoski and Jay T. Lennon"
+author: "Tajinder Singh, Nathan I. Wisnoski, and Jay T. Lennon"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
   html_document:
@@ -13,8 +13,17 @@ header-includes:
 - \usepackage{array}
 - \usepackage{graphics}
 ---
+---
 
-# Initial Setup
+
+normal para text
+
+
+# main header
+
+## sub header
+
+### sub-sub header
 
 ```{r setup, echo=FALSE}
 knitr::opts_chunk$set(
@@ -38,7 +47,7 @@ source("bin/mothur_tools.R")
 se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
 ```
 
-Next, we'll set the aesthetics of the figures we will produce.
+Next, we'll set the aesthetics of the figures we will produce
 
 ```{r figure_setup}
 my.cols <- RColorBrewer::brewer.pal(n = 4, name = "Greys")[3:4]
@@ -68,7 +77,9 @@ theme_set(theme_classic() +
 
 ## Import Data
 
-Here, we read in the processed sequence files from mothur (shared and taxonomy) and a design of the sampling. We also load in the environmental data. We then remove the mock community from the dataset and ensure the the design and OTU table are aligned by row.
+Here, we read in the processed sequence files from mothur (shared and taxonomy) and a design of the sampling. We also load in the environmental data. We then remove the mock community from the dataset and ensure the the design and OTU table are aligned by row
+
+
 
 ```{r}
 # Define Inputs
@@ -94,6 +105,7 @@ OTUs <- OTUs[-which(rownames(OTUs) == "RGMockComm"),]
 OTUs <- rrarefy(OTUs, min(rowSums(OTUs)))
 OTUs.REL <- decostand(OTUs, "total")
 ```
+
 
 # Are the "persistent" reservoir taxa really representative? Look over time...
 
@@ -121,16 +133,17 @@ UL.ts.design <- left_join(UL.ts.design, env.ts.data[,c("sample.id", "date")])
 env.ts.data <- env.ts.data[-which(!(env.ts.data$date %in% UL.ts.design$date)),]
 ```
 
+
 ```{r}
-soil.sites <- OTUs[str_which(rownames(OTUs), "Soil"),]
-in.soils <- soil.sites[,which(colSums(soil.sites) > 0)]
+RGSoil.OTUs <- OTUs[str_which(rownames(OTUs), "RGSoil"),] 
+in.soils <- RGSoil.OTUs[,which(colSums(RGSoil.OTUs) > 0)]
 
 soil.taxa <- colnames(in.soils)
-nonsoil.taxa <- colnames(soil.sites[,which(colSums(soil.sites) == 0)])
+nonsoil.taxa <- colnames(RGSoil.OTUs[,which(colSums(RGSoil.OTUs) == 0)])
 
 length(soil.taxa) + length(nonsoil.taxa) == ncol(OTUs)
 
-max.abund.in.soils <- apply(decostand(soil.sites, "total"), MARGIN = 2, max)
+max.abund.in.soils <- apply(decostand(RGSoil.OTUs, "total"), MARGIN = 2, max)
 common.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils >= 0.001)])
 rare.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils < 0.001)])
 length(common.in.soils) + length(rare.in.soils) == ncol(OTUs)
@@ -138,12 +151,12 @@ length(common.in.soils) + length(rare.in.soils) == ncol(OTUs)
 # pull out time series of taxa in soils
 UL.ts.toplot.RNA <- UL.ts.OTUs.RNA[,which(colMeans(UL.ts.OTUs.DNA.PA) > .2)] # present in half samples
 
-OTUs.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% soil.taxa)]
+OTUs.toplot.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% soil.taxa)]
 
 # pull out taxa not detected in soils
-OTUs.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% nonsoil.taxa)]
+OTUs.toplot.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% nonsoil.taxa)]
 
-ncol(OTUs.in.soil) + ncol(OTUs.not.in.soil) == ncol(UL.ts.toplot.RNA)
+ncol(OTUs.toplot.in.soil) + ncol(OTUs.toplot.not.in.soil) == ncol(UL.ts.toplot.RNA)
 
 otu_trends_to_plot <- cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.in.soil) %>% as_tibble() %>% 
   gather(-sample.name, -sample.type, -sample.id, -date, key = OTU, value = rel_abund) %>% 
@@ -162,10 +175,13 @@ otu_trends_to_plot %>%
   labs(x = "",
        y = "Relative abundance")
   
-  
+
 ```
 
+
+
 Many of them do appear to track the seasons quite well, suggesting there could be a seasonality component to the role of terrestrial inputs into the reservoir.
+
 
 ```{r}
 otu_trends_to_plot %>% 
@@ -183,58 +199,61 @@ otu_trends_to_plot %>%
   facet_wrap(~OTU) +
   labs(x = "",
        y = "Relative abundance")
+
 ```
 
 
 
+Proportion of Soil OTUs richness in the Seed bank
 
-New chunk to try some graphs
 ```{r}
-RGSoil.OTUs <- OTUs[str_which(rownames(OTUs), "RGSoil"),]
-
-SB.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
-head(SB.OTUs.PA[,1:10])
+SB.ts.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
+head(SB.ts.OTUs.PA[,1:10])
 
 #create vector for seed bank richness
 
-SB.richness <- rowSums(SB.OTUs.PA)
+SB.ts.richness <- rowSums(SB.ts.OTUs.PA)
 
-plot(SB.richness, type = "l")
+plot(SB.ts.richness, type = "l")
 
 #creating matrix of all OTUs present in soil across the three samples
 
 RGSoil.OTUs.PA<- t(decostand(colSums(RGSoil.OTUs), method = "pa"))
 
-#Applying function to create matrix with OTUs only in soil
+#Applying function to create SB matrix with OTUs only in soil
 
-SBrow1 <- SB.OTUs.PA[1,]
-SB.Soil.PA<- apply(SB.OTUs.PA, 1, FUN= function(x){RGSoil.OTUs.PA+ x -1})
-SB.Soil.PA<-t(SB.Soil.PA>0)*1
+SBrow1 <- SB.ts.OTUs.PA[1,]
+SB.ts.Soil.PA<- apply(SB.ts.OTUs.PA, 1, FUN= function(x){RGSoil.OTUs.PA+ x -1})
+SB.ts.Soil.PA<-t(SB.ts.Soil.PA>0)*1
 
 #getting SB soil richness value
 
-SB.Soil.richness <- rowSums(SB.Soil.PA)
+SB.ts.Soil.richness <- rowSums(SB.ts.Soil.PA)
 
 #plot rel .abundance
 
-plot(SB.Soil.richness/SB.richness, type = "l")
+plot(SB.ts.Soil.richness/SB.ts.richness, type = "l")
 
 
-  
+
 ```
+Trying the graph above in a different way with preexisting objects
 
-
-
-#Transforming proportions data into a table form
 ```{r}
+SB.ts.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
+head(SB.ts.OTUs.PA[,1:10])
 
-#making a data frame for proportion of soil OTUs in SB
+#create vector for seed bank richness
 
-SB.Soil.Prop <- tibble(sample.id= env.ts.data$sample.id, date= env.ts.data$date, Soil.Prop= SB.Soil.richness/SB.richness)
+SB.ts.richness <- rowSums(SB.ts.OTUs.PA)
 
-#plotting proportion over time
+plot(SB.ts.richness, type = "l")
 
-ggplot(SB.Soil.Prop, aes(x= date, y= Soil.Prop))+
-  geom_smooth()
+#obtaining soil OTU richness in SB
+
+new <- subset(SB.ts.OTUs.PA,select = colnames(in.soils) )
+new.sb.soil.richness <- rowSums(new)
+identical(new.sb.soil.richness, SB.ts.Soil.richness)
+
+plot(new.sb.soil.richness/SB.ts.richness, type= "l")
 ```
-
