@@ -158,7 +158,7 @@ OTUs.toplot.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in
 
 ncol(OTUs.toplot.in.soil) + ncol(OTUs.toplot.not.in.soil) == ncol(UL.ts.toplot.RNA)
 
-otu_trends_to_plot <- cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.in.soil) %>% as_tibble() %>% 
+otu_trends_to_plot <- cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.toplot.in.soil) %>% as_tibble() %>% 
   gather(-sample.name, -sample.type, -sample.id, -date, key = OTU, value = rel_abund) %>% 
   mutate(soils = ifelse(OTU %in% nonsoil.taxa, "Absent from soils",
                    ifelse(OTU %in% common.in.soils, "Common in soils", "Rare in soils")))
@@ -206,38 +206,6 @@ otu_trends_to_plot %>%
 
 Proportion of Soil OTUs richness in the Seed bank
 
-```{r}
-SB.ts.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
-head(SB.ts.OTUs.PA[,1:10])
-
-#create vector for seed bank richness
-
-SB.ts.richness <- rowSums(SB.ts.OTUs.PA)
-
-plot(SB.ts.richness, type = "l")
-
-#creating matrix of all OTUs present in soil across the three samples
-
-RGSoil.OTUs.PA<- t(decostand(colSums(RGSoil.OTUs), method = "pa"))
-
-#Applying function to create SB matrix with OTUs only in soil
-
-SBrow1 <- SB.ts.OTUs.PA[1,]
-SB.ts.Soil.PA<- apply(SB.ts.OTUs.PA, 1, FUN= function(x){RGSoil.OTUs.PA+ x -1})
-SB.ts.Soil.PA<-t(SB.ts.Soil.PA>0)*1
-
-#getting SB soil richness value
-
-SB.ts.Soil.richness <- rowSums(SB.ts.Soil.PA)
-
-#plot rel .abundance
-
-plot(SB.ts.Soil.richness/SB.ts.richness, type = "l")
-
-
-
-```
-Trying the graph above in a different way with preexisting objects
 
 ```{r}
 SB.ts.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
@@ -251,9 +219,30 @@ plot(SB.ts.richness, type = "l")
 
 #obtaining soil OTU richness in SB
 
-new <- subset(SB.ts.OTUs.PA,select = colnames(in.soils) )
-new.sb.soil.richness <- rowSums(new)
-identical(new.sb.soil.richness, SB.ts.Soil.richness)
+SB.ts.Soil.OTUs.PA <- subset(SB.ts.OTUs.PA,select = colnames(in.soils) )
+SB.ts.Soil.richness <- rowSums(SB.ts.Soil.OTUs.PA)
+identical(SB.ts.Soil.richness, SB.ts.Soil.richness)
 
-plot(new.sb.soil.richness/SB.ts.richness, type= "l")
+
+png("figures/sbsoilrichness.png", width = 8, height = 6, res= 500, units = "in")
+plot(SB.ts.Soil.richness/SB.ts.richness, type= "l")
+dev.off(which = 2)
 ```
+
+
+Making a smooth line graph
+
+```{r}
+#making a data frame for proportion of soil OTUs in SB
+
+SB.ts.Soil.Prop <- tibble(sample.id= env.ts.data$sample.id, date= env.ts.data$date, Soil.Prop= SB.ts.Soil.richness/SB.ts.richness)
+
+#plotting proportion over time
+
+sb.soil.richness.sm <- ggplot(SB.ts.Soil.Prop, aes(x= date, y= Soil.Prop))+
+  geom_point()+
+  geom_smooth()
+ggsave(filename = "figures/sbsoilprop.pdf", plot = sb.soil.richness.sm, height = 6, width = 8) 
+
+```
+
