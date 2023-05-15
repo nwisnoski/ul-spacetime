@@ -246,3 +246,147 @@ ggsave(filename = "figures/sbsoilprop.pdf", plot = sb.soil.richness.sm, height =
 
 ```
 
+
+
+changing wide form to long form
+```{r}
+
+OTU.ts.long<- UL.ts.OTUs.RNA |> as_tibble() |> 
+  rownames_to_column( var= "sample.id" ) |> 
+  mutate(sample.id= as.integer(sample.id)) |> 
+  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
+  left_join(env.ts.data, by= "sample.id" )
+
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter( OTU %in% soil.taxa) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+
+```
+
+
+
+Classifying Middle OTUs in RG samples
+
+```{r}
+
+RG.middle.OTU <-OTUs.REL[c("RGD08", "RGD09", "RGD10", "RGD11", "RGc08", "RGc09", "RGc10", "RGc11"),]
+RG.middle.OTU <-OTUs.REL[c("RGD08", "RGD09", "RGD10", "RGD11", "RGc08", "RGc09", "RGc10", "RGc11"),]
+
+#OTUs always active
+RG.middle.RNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGc"), ])))
+RG.middle.Ac <- RG.middle.RNA[, which(RG.middle.RNA[1, ] > 0)]
+RG.avg.ac<- colnames(RG.middle.Ac)
+RG.avg.soil.ac <- RG.middle.Ac[, which(colnames(RG.middle.Ac) %in% soil.taxa)]
+
+#OTUs never active
+RG.middle.DNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGD"),])))
+RG.middle.sb <- RG.middle.DNA |> 
+  select(where(~. >0)) |> 
+  select(!matches(RG.avg.ac))
+RG.avg.sb <- colnames(RG.middle.sb)
+RG.avg.soil.sb <- RG.middle.sb[, which(colnames(RG.middle.sb) %in% soil.taxa)]
+
+ 
+```
+
+
+
+Classifying middle OTUs based on relative abundance
+```{r}
+
+
+RG.clsfd.ac <- RG.middle.Ac |>
+  t() |>
+  as_tibble() |> 
+  rename(rel.ab = V1) |> 
+  mutate(ab.class = if_else(rel.ab< exp(-10), 6, 
+                            if_else(rel.ab < exp(-9), 5, 
+                            if_else(rel.ab < exp(-8), 4, 
+                                    if_else(rel.ab < exp(-6), 3, 
+                                            if_else(rel.ab < exp(-4), 2, 
+                                                    if_else(rel.ab < exp(-2), 1, 12)))))))
+
+
+row.names(RG.clsfd.ac) <- names(RG.middle.Ac)
+
+
+RG.clsfd.sb<- RG.middle.sb |>
+  t() |> 
+  as_tibble() |> 
+  rename(rel.ab = V1) |> 
+  mutate(ab.class = if_else(rel.ab< exp(-10), 6, 
+                            if_else(rel.ab < exp(-9), 5, 
+                            if_else(rel.ab < exp(-8), 4, 
+                                    if_else(rel.ab < exp(-6), 3, 
+                                            if_else(rel.ab < exp(-4), 2, 
+                                                    if_else(rel.ab < exp(-2), 1, 12)))))))
+
+row.names(RG.clsfd.sb) <- names(RG.middle.sb)
+
+```
+
+
+
+
+
+
+Graphing Soil OTUs based on classification
+```{r}
+
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter(OTU %in% soil.taxa) |>
+  left_join(RG.clsfd.ac, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+```
+
+
+
+
+```{r}
+OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% soil.taxa) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+#getting taxonomy of classes
+clsfd.sb.3<- filter(RG.clsfd.sb, ab.class == 3)
+v<- OTU.tax |> filter(OTU %in% RG.clsfd.sb$OTU) |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.3$OTU)
+  
+  
+
+```
+
+ 
+ 
+```{r}
+
+
+OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
+  select(!matches(soil.taxa)) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+z<- OTU.tax |> filter(OTU %in% RG.clsfd.sb$OTU) |> 
+  select(!matches(soil.taxa)) |>
+  filter(OTU %in% clsfd.sb.3$OTU)
+  
+
+```
+ 
+  
+
+
