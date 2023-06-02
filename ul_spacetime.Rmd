@@ -311,7 +311,7 @@ RG.clsfd.ac <- RG.middle.Ac |>
 
 
 row.names(RG.clsfd.ac) <- names(RG.middle.Ac)
-
+RG.clsfd.ac<- rownames_to_column(RG.clsfd.ac, var = "OTU")
 
 RG.clsfd.sb<- RG.middle.sb |>
   t() |> 
@@ -325,7 +325,7 @@ RG.clsfd.sb<- RG.middle.sb |>
                                                     if_else(rel.ab < exp(-2), 1, 12)))))))
 
 row.names(RG.clsfd.sb) <- names(RG.middle.sb)
-
+RG.clsfd.sb<- rownames_to_column(RG.clsfd.sb, var = "OTU")
 ```
 
 
@@ -343,6 +343,75 @@ OTU.ts.long |> filter(OTU %in% RG.avg.ac) |>
   geom_line(alpha = 0.3)+
   scale_y_log10()+
   facet_wrap(~ab.class)
+
+
+
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter(!OTU %in% soil.taxa) |>
+  left_join(RG.clsfd.ac, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+
+
+
+#getting taxonomy of different rel. abundance classes
+clsfd.ac.1<- filter(RG.clsfd.ac, ab.class == 1)
+so.ac.1<- OTU.tax |>  
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.1$OTU)
+
+aq.ac.1<- OTU.tax |> 
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.1$OTU)
+
+clsfd.ac.2<- filter(RG.clsfd.ac, ab.class == 2)
+so.ac.2<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.2$OTU)
+
+aq.ac.2<- OTU.tax |>  
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.2$OTU)
+
+clsfd.ac.3<- filter(RG.clsfd.ac, ab.class == 3)
+so.ac.3<- OTU.tax |>  
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.3$OTU)
+
+aq.ac.3<- OTU.tax |>  
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.3$OTU)
+
+clsfd.ac.4<- filter(RG.clsfd.ac, ab.class == 4)
+so.ac.4<- OTU.tax |>  
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.4$OTU)
+
+aq.ac.4<- OTU.tax |> 
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.4$OTU)
+
+clsfd.ac.5<- filter(RG.clsfd.ac, ab.class == 5)
+so.ac.5<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.5$OTU)
+
+aq.ac.5<- OTU.tax |> 
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.5$OTU)
+
+clsfd.ac.6<- filter(RG.clsfd.ac, ab.class == 6)
+so.ac.6<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.6$OTU)
+
+aq.ac.6<- OTU.tax |> 
+  filter(!OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.ac.6$OTU)
+  
 ```
 
 
@@ -357,35 +426,79 @@ OTU.ts.long |> filter(OTU %in% RG.avg.sb) |>
   scale_y_log10()+
   facet_wrap(~ab.class)
 
-#getting taxonomy of classes
-clsfd.sb.3<- filter(RG.clsfd.sb, ab.class == 3)
-v<- OTU.tax |> filter(OTU %in% RG.clsfd.sb$OTU) |> 
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.3$OTU)
-  
-  
-
-```
-
- 
- 
-```{r}
-
-
 OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  select(!matches(soil.taxa)) |>
+  filter(!OTU %in% soil.taxa) |>
   left_join(RG.clsfd.sb, by = "OTU") |> 
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
   geom_line(alpha = 0.3)+
   scale_y_log10()+
   facet_wrap(~ab.class)
 
-z<- OTU.tax |> filter(OTU %in% RG.clsfd.sb$OTU) |> 
-  select(!matches(soil.taxa)) |>
+#getting taxonomy of different rel. abundance classes
+
+clsfd.sb.1<- filter(RG.clsfd.sb, ab.class == 1)
+so.sb.1<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.1$OTU)
+
+aq.sb.1<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.1$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
+clsfd.sb.2<- filter(RG.clsfd.sb, ab.class == 2)
+so.sb.2<- OTU.tax |>
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.2$OTU)
+
+aq.sb.2<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.2$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
+clsfd.sb.3<- filter(RG.clsfd.sb, ab.class == 3)
+so.sb.3<- OTU.tax |>
+  filter( OTU %in% soil.taxa) |>
   filter(OTU %in% clsfd.sb.3$OTU)
+
+aq.sb.3<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.3$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
+clsfd.sb.4<- filter(RG.clsfd.sb, ab.class == 4)
+so.sb.4<- OTU.tax |>
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.4$OTU)
+
+aq.sb.4<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.4$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
+clsfd.sb.5<- filter(RG.clsfd.sb, ab.class == 5)
+so.sb.5<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.5$OTU)
+
+aq.sb.5<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.5$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
+clsfd.sb.6<- filter(RG.clsfd.sb, ab.class == 6)
+so.sb.6<- OTU.tax |> 
+  filter( OTU %in% soil.taxa) |>
+  filter(OTU %in% clsfd.sb.6$OTU)
+
+aq.sb.6<- OTU.tax |> 
+  filter(OTU %in% clsfd.sb.6$OTU) |> 
+  filter(!OTU %in% soil.taxa)
+
   
 
 ```
+
+ 
+
+  
+
+
  
   
 
