@@ -42,6 +42,11 @@ library(tidyverse)
 library(vegan)
 library(viridis)
 library(lubridate)
+library(cluster)
+library(dtwclust)
+
+
+
 
 source("bin/mothur_tools.R")
 se <- function(x, ...){sd(x, na.rm = TRUE)/sqrt(length(na.omit(x)))}
@@ -248,23 +253,8 @@ ggsave(filename = "figures/sbsoilprop.pdf", plot = sb.soil.richness.sm, height =
 
 
 
-changing wide form to long form
-```{r}
-
-OTU.ts.long<- UL.ts.OTUs.RNA |> as_tibble() |> 
-  rownames_to_column( var= "sample.id" ) |> 
-  mutate(sample.id= as.integer(sample.id)) |> 
-  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
-  left_join(env.ts.data, by= "sample.id" )
-
-OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
-  filter( OTU %in% soil.taxa) |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()
 
 
-```
 
 
 
@@ -273,7 +263,7 @@ Classifying Middle OTUs in RG samples
 ```{r}
 
 RG.middle.OTU <-OTUs.REL[c("RGD08", "RGD09", "RGD10", "RGD11", "RGc08", "RGc09", "RGc10", "RGc11"),]
-RG.middle.OTU <-OTUs.REL[c("RGD08", "RGD09", "RGD10", "RGD11", "RGc08", "RGc09", "RGc10", "RGc11"),]
+
 
 #OTUs always active
 RG.middle.RNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGc"), ])))
@@ -328,6 +318,25 @@ row.names(RG.clsfd.sb) <- names(RG.middle.sb)
 RG.clsfd.sb<- rownames_to_column(RG.clsfd.sb, var = "OTU")
 ```
 
+
+
+
+
+changing wide form to long form
+```{r}
+OTU.ts.long<- UL.ts.OTUs.RNA |> as_tibble() |> 
+  rownames_to_column( var= "sample.id" ) |> 
+  mutate(sample.id= as.integer(sample.id)) |> 
+  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
+  left_join(env.ts.data, by= "sample.id" )
+
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter( OTU %in% soil.taxa) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+```
 
 
 
@@ -496,10 +505,566 @@ aq.sb.6<- OTU.tax |>
 
  
 
+
+OTUs Filtered by abundance in soil
+
+```{r}
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter(OTU %in% common.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+  filter(OTU %in% rare.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% common.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% rare.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+```
+
+
+
+Looking into seedbank dynamics
+
+```{r}
+#making seedbank long form
+
+SB.ts.OTUs <- colnames(SB.ts.OTUs.PA)[colSums(SB.ts.OTUs.PA) > 0]
+UL.ts.OTUs.sb<- UL.ts.OTUs.DNA[, colnames(UL.ts.OTUs.DNA) %in% SB.ts.OTUs]
+
+
+OTU.ts.long.sb<- UL.ts.OTUs.sb |>
+  as_tibble() |> 
+  rownames_to_column( var= "sample.id" ) |> 
+  mutate(sample.id= as.integer(sample.id)) |> 
+  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
+  left_join(env.ts.data, by= "sample.id" )
+
+OTU.ts.long.sb |> filter(OTU %in% RG.avg.ac) |> 
+  filter(OTU %in% common.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long.sb |> filter(OTU %in% RG.avg.ac) |> 
+  filter(OTU %in% rare.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long.sb |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% common.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+
+OTU.ts.long.sb |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% rare.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+```
+
   
+
+
+
+
+attempting to get sorted RNA and DNA presence absences to recognise clusters
+
+```{r}
+
+X0<- as.data.frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]) 
+X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824)
+plot(x= rownames(X), y= X$fraction, type = "l")
+X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343)
+plot(x= rownames(X1), y= X1$fraction, type = "l")
+
+ X2 <- X0 |> 
+  subset(X0 %in% rare.in.soils)
+ 
+```
 
 
  
+ 
+```{r}
+X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824)
+plot(x= rownames(X), y= X$fraction, type = "l")
+X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343)
+plot(x= rownames(X1), y= X1$fraction, type = "l")
+
+Y<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA[,colSums(UL.ts.OTUs.DNA.PA)>0])/19399)
+plot(x= rownames(Y), y= Y$fraction, type = "l")
+Y1<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA)/83343)
+plot(x= rownames(Y1), y= Y1$fraction, type = "l")
+
+Z<- data_frame(fraction= rowSums(SB.ts.OTUs.PA[,colSums(SB.ts.OTUs.PA)>0])/12130)
+plot(x= rownames(Z), y= Z$fraction, type = "l")
+Z1<- data_frame(fraction= rowSums(SB.ts.OTUs.PA)/83343)
+plot(x= rownames(Z1), y= Z1$fraction, type = "l")
+```
+ 
   
+Plotting a cluster table to find best fits for patterns in ts.RNA 
+
+```{r}
+
+# Create an empty table to store the cluster results
+cluster_table <- data.frame(ID = 1:50, Cluster = NA)
+
+Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
+Q2<- t(data_frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]))
+Q3<- as.data.frame(UL.ts.OTUs.RNA[,colSums(UL.ts.OTUs.RNA)>0])
+
+
+for (k in 2:50) {
+  # Calculate the distance matrix
+  dist_matrix <- vegdist(Q2, method = "jaccard")
+  
+  # Check for missing or infinite values
+  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
+    # Handle missing or infinite values
+    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
+  }
+  
+  # Perform hierarchical clustering
+  hclust_result <- hclust(dist_matrix, method = "complete")
+  
+  # Obtain the clusters for the current iteration
+  clusters <- cutree(hclust_result, k = k)
+  sill<- silhouette(clusters, dist = dist_matrix)
+  
+  # Assign cluster names to the corresponding IDs
+  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
+  
+  # Store the cluster results in the table
+  cluster_table$Cluster[k] <- summary(sill)$avg.width
+}
+
+
+plot(cluster_table)
+
+write.csv(cluster_table, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv", row.names = FALSE)
+
+assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv"))
+
+plot(clst.ts.rna.p)
+```
+
+
+Plotting a cluster table to find best fits for patterns in RG.avg
+
+```{r}
+# Create an empty table to store the cluster results
+cluster_table.avg <- data.frame(ID = 1:50, Cluster = NA)
+
+Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
+
+for (k in 2:50) {
+  # Calculate the distance matrix
+  dist_matrix <- vegdist(Q, method = "jaccard")
+  
+  # Check for missing or infinite values
+  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
+    # Handle missing or infinite values
+    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
+  }
+  
+  # Perform hierarchical clustering
+  hclust_result <- hclust(dist_matrix, method = "complete")
+  
+  # Obtain the clusters for the current iteration
+  clusters <- cutree(hclust_result, k = k)
+  sill<- silhouette(clusters, dist = dist_matrix)
+  
+  # Assign cluster names to the corresponding IDs
+  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
+  
+  # Store the cluster results in the table
+  cluster_table.avg$Cluster[k] <- summary(sill)$avg.width
+}
+
+
+plot(cluster_table.avg)
+
+write.csv(cluster_table.avg, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv", row.names = FALSE)
+
+assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv"))
+
+plot(clst.ts.rna.p)
+```
+
+
+
+
+Making clusters for k=18
+```{r}
+ dist_matrix <-vegdist(Q2, method = "jaccard")
+
+ # Check for missing or infinite values
+  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
+    # Handle missing or infinite values
+    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0 } # Replace with 0 or any other appropriate value
+    
+    # Perform hierarchical clustering
+  hclust_result <- hclust(dist_matrix, method = "complete")
+  clusters <- cutree(hclust_result, k = 18)
+  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
+  
+df<- as.data.frame(t(Q2))
+names(df) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
+
+
+clusters.df<- as.data.frame(clusters)
+clusters.df$OTU<- rownames(clusters.df)
+clusters.df<- clusters.df |> 
+  mutate(clusters= as.factor(clusters))
+clusters.df |> group_by(clusters) |> 
+  count(OTU) |> 
+  summarise(sum(count))
+
+OTU.ts.long |> filter(OTU %in% colnames(df)) |> 
+  left_join(clusters.df, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters)
+
+OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
+  filter(OTU %in% rare.in.soils) |>
+  left_join(RG.clsfd.sb, by = "OTU") |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~ab.class)
+```
+
+
+
+
+
+Re-clustering after filtering based on abundance class 1
+```{r}
+df<- as.data.frame(t(Q2))
+names(df) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
+df.1<- df |> select(any_of(clsfd.ac.1$OTU))
+dist_matrix.1<- vegdist(t(df.1), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.1)) || any(is.infinite(dist_matrix.1))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.1 <- hclust(dist_matrix.1, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.1 <- cutree(hclust_result.1, k = 3)
+sill.1<- silhouette(clusters.1, dist = dist_matrix.1)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.1) <- colnames(select(df, any_of(clsfd.ac.1$OTU)))
+
+summary(sill.1)$avg.width
+
+clusters.df.1<- as.data.frame(clusters.1)
+clusters.df.1$OTU<- rownames(clusters.df.1)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.1)) |> 
+  left_join(clusters.df.1, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.1)
+
+
+```
+
+
+
+
+
+
+
+Re-clustering after filtering based on abundance class 2
+```{r}
+df.2<- df |> select(any_of(clsfd.ac.2$OTU))
+dist_matrix.2<- vegdist(t(df.2), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.2)) || any(is.infinite(dist_matrix.2))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.2) | is.infinite(dist_matrix.2)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.2 <- hclust(dist_matrix.2, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.2 <- cutree(hclust_result.2, k = 4)
+sill.2<- silhouette(clusters.2, dist = dist_matrix.2)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.2) <- colnames(select(df, any_of(clsfd.ac.2$OTU)))
+
+summary(sill.2)$avg.width
+
+clusters.df.2<- as.data.frame(clusters.2)
+clusters.df.2$OTU<- rownames(clusters.df.2)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.2)) |> 
+  left_join(clusters.df.2, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.2, scales = "free_y")
+
+
+```
+
+
+
+
+
+
+Re-clustering after filtering based on abundance class 3
+```{r}
+df.3<- df |> select(any_of(clsfd.ac.3$OTU))
+dist_matrix.3<- vegdist(t(df.3), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.3)) || any(is.infinite(dist_matrix.3))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.3) | is.infinite(dist_matrix.3)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.3 <- hclust(dist_matrix.3, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.3 <- cutree(hclust_result.3, k = 5)
+sill.3<- silhouette(clusters.3, dist = dist_matrix.3)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.3) <- colnames(select(df, any_of(clsfd.ac.3$OTU)))
+
+summary(sill.3)$avg.width
+
+clusters.df.3<- as.data.frame(clusters.3)
+clusters.df.3$OTU<- rownames(clusters.df.3)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.3)) |> 
+  left_join(clusters.df.3, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.3)
+
+
+```
+
+
+
+
+
+Re-clustering after filtering based on abundance class 4
+```{r}
+df.4<- df |> select(any_of(clsfd.ac.4$OTU))
+dist_matrix.4<- vegdist(t(df.4), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.4)) || any(is.infinite(dist_matrix.4))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.4) | is.infinite(dist_matrix.4)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.4 <- hclust(dist_matrix.4, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.4 <- cutree(hclust_result.4, k = 4)
+sill.4<- silhouette(clusters.4, dist = dist_matrix.4)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.4) <- colnames(select(df, any_of(clsfd.ac.4$OTU)))
+
+summary(sill.4)$avg.width
+
+clusters.df.4<- as.data.frame(clusters.4)
+clusters.df.4$OTU<- rownames(clusters.df.4)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.4)) |> 
+  left_join(clusters.df.4, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.4)
+
+
+```
+
+
+
+
+Re-clustering after filtering based on abundance class 5
+```{r}
+df.5<- df |> select(any_of(clsfd.ac.5$OTU))
+dist_matrix.5<- vegdist(t(df.5), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.5)) || any(is.infinite(dist_matrix.5))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.5) | is.infinite(dist_matrix.5)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.5 <- hclust(dist_matrix.5, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.5 <- cutree(hclust_result.5, k = 2)
+sill.5<- silhouette(clusters.5, dist = dist_matrix.5)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.5) <- colnames(select(df, any_of(clsfd.ac.5$OTU)))
+
+summary(sill.5)$avg.width
+
+clusters.df.5<- as.data.frame(clusters.5)
+clusters.df.5$OTU<- rownames(clusters.df.5)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.5)) |> 
+  left_join(clusters.df.5, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.5)
+
+```
+
+
+
+
+Re-clustering after filtering based on abundance class 6
+```{r}
+df.6<- df |> select(any_of(clsfd.ac.6$OTU))
+dist_matrix.6<- vegdist(t(df.6), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.6)) || any(is.infinite(dist_matrix.6))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.6) | is.infinite(dist_matrix.6)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.6 <- hclust(dist_matrix.6, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.6 <- cutree(hclust_result.6, k = 5)
+sill.6<- silhouette(clusters.6, dist = dist_matrix.6)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.6) <- colnames(select(df, any_of(clsfd.ac.6$OTU)))
+
+summary(sill.6)$avg.width
+
+clusters.df.6<- as.data.frame(clusters.6)
+clusters.df.6$OTU<- rownames(clusters.df.6)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.6)) |> 
+  left_join(clusters.df.6, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.6)
+
+```
+
+
+
+Trying the same thing on "Seedbank"
+```{r}
+df.1c<- Q3 |> select(any_of(clsfd.ac.1$OTU))
+dist_matrix.1c<- vegdist(t(df.1c), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.1c)) || any(is.infinite(dist_matrix.1c))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.1c) | is.infinite(dist_matrix.1c)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.1c <- hclust(dist_matrix.1c, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.1c <- cutree(hclust_result.1c, k = 5)
+sill.1c<- silhouette(clusters.1c, dist = dist_matrix.1c)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.1c) <- colnames(select(Q3, any_of(clsfd.ac.1$OTU)))
+
+summary(sill.1c)$avg.width
+
+clusters.df.1c<- as.data.frame(clusters.1c)
+clusters.df.1c$OTU<- rownames(clusters.df.1c)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.1c)) |> 
+  left_join(clusters.df.1c, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.1c)
+
+```
+
 
 
