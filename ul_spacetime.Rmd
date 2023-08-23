@@ -148,6 +148,7 @@ nonsoil.taxa <- colnames(RGSoil.OTUs[,which(colSums(RGSoil.OTUs) == 0)])
 
 length(soil.taxa) + length(nonsoil.taxa) == ncol(OTUs)
 
+
 max.abund.in.soils <- apply(decostand(RGSoil.OTUs, "total"), MARGIN = 2, max)
 common.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils >= 0.001)])
 rare.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils < 0.001)])
@@ -209,8 +210,8 @@ otu_trends_to_plot %>%
 
 
 
-Proportion of Soil OTUs richness in the Seed bank
-
+Proportion of Soil OTUs richness in the Seed bank, to be used later to identify 
+soil OTUs dormancy and activity patterns
 
 ```{r}
 SB.ts.OTUs.PA <- UL.ts.OTUs.DNA.PA-UL.ts.OTUs.RNA.PA
@@ -235,7 +236,7 @@ dev.off(which = 2)
 ```
 
 
-Making a smooth line graph
+Making a smooth line graph for soil richness
 
 ```{r}
 #making a data frame for proportion of soil OTUs in SB
@@ -258,7 +259,9 @@ ggsave(filename = "figures/sbsoilprop.pdf", plot = sb.soil.richness.sm, height =
 
 
 
-Classifying Middle OTUs in RG samples
+Classifying Middle OTUs in RG samples, the classification will help focus on a smaller
+section of the OTUs closer to the Time series collection to get a better
+activity representation instead of far way points which might be too different.
 
 ```{r}
 
@@ -285,6 +288,7 @@ RG.avg.soil.sb <- RG.middle.sb[, which(colnames(RG.middle.sb) %in% soil.taxa)]
 
 
 Classifying middle OTUs based on relative abundance
+classification helps to see if different classes behave differently in activity patterns
 ```{r}
 
 
@@ -322,7 +326,7 @@ RG.clsfd.sb<- rownames_to_column(RG.clsfd.sb, var = "OTU")
 
 
 
-changing wide form to long form
+changing wide form to long form, for code and plot efficiency
 ```{r}
 OTU.ts.long<- UL.ts.OTUs.RNA |> as_tibble() |> 
   rownames_to_column( var= "sample.id" ) |> 
@@ -342,7 +346,8 @@ OTU.ts.long |> filter(OTU %in% RG.avg.ac) |>
 
 
 
-Graphing Soil OTUs based on classification
+Graphing Soil OTUs based on classification, to get a more readable picture
+possibly to see seasonality trends
 ```{r}
 
 OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
@@ -425,7 +430,8 @@ aq.ac.6<- OTU.tax |>
 
 
 
-
+Plotting the same in seed bank, *caution: seed bank is purely theoretical and might 
+not give an accurate representation
 ```{r}
 OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
   filter(OTU %in% soil.taxa) |>
@@ -506,7 +512,9 @@ aq.sb.6<- OTU.tax |>
  
 
 
-OTUs Filtered by abundance in soil
+OTUs Filtered by abundance in soil, to further filter some noise and be able to 
+see better activity patterns and seasonality. Also, if differnt classes behaved differently.
+Thre idea was that rare in soils would be more abundand in aquatic communities
 
 ```{r}
 OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
@@ -544,7 +552,8 @@ OTU.ts.long |> filter(OTU %in% RG.avg.sb) |>
 
 
 
-Looking into seedbank dynamics
+Looking into seedbank dynamics classified by dominance in soil samples.
+To see if different dominant classes are present in the seed bank.
 
 ```{r}
 #making seedbank long form
@@ -598,14 +607,17 @@ OTU.ts.long.sb |> filter(OTU %in% RG.avg.sb) |>
 
 
 
-attempting to get sorted RNA and DNA presence absences to recognise clusters
+attempting to get sorted RNA and DNA presence absences to recognise clusters.
+Checking to see what fraction of OTUs are active at any given time point.
+To recognize if a higher or lower fraction of the OTUs are active at different times
+possibly hinting at seasonality
 
 ```{r}
 
 X0<- as.data.frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]) 
-X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824)
+X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824) #only active OTUs
 plot(x= rownames(X), y= X$fraction, type = "l")
-X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343)
+X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343) #all OTUs
 plot(x= rownames(X1), y= X1$fraction, type = "l")
 
  X2 <- X0 |> 
@@ -614,22 +626,25 @@ plot(x= rownames(X1), y= X1$fraction, type = "l")
 ```
 
 
- 
+Trying to see the same fractional activity patterns in RNA, DNA, SB datasets
+The significant difference between OTUs that were ever present vs all OTUs raises the
+question of wether those other OTUs should even be focused on that were never even detected in the data sets
+If not detected then, where are they coming from????
  
 ```{r}
-X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824)
+X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824) #Present
 plot(x= rownames(X), y= X$fraction, type = "l")
-X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343)
+X1<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA)/83343) #All
 plot(x= rownames(X1), y= X1$fraction, type = "l")
 
-Y<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA[,colSums(UL.ts.OTUs.DNA.PA)>0])/19399)
+Y<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA[,colSums(UL.ts.OTUs.DNA.PA)>0])/19399) #Present
 plot(x= rownames(Y), y= Y$fraction, type = "l")
-Y1<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA)/83343)
+Y1<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA)/83343)#ALl
 plot(x= rownames(Y1), y= Y1$fraction, type = "l")
 
-Z<- data_frame(fraction= rowSums(SB.ts.OTUs.PA[,colSums(SB.ts.OTUs.PA)>0])/12130)
+Z<- data_frame(fraction= rowSums(SB.ts.OTUs.PA[,colSums(SB.ts.OTUs.PA)>0])/12130) #Present
 plot(x= rownames(Z), y= Z$fraction, type = "l")
-Z1<- data_frame(fraction= rowSums(SB.ts.OTUs.PA)/83343)
+Z1<- data_frame(fraction= rowSums(SB.ts.OTUs.PA)/83343) #All
 plot(x= rownames(Z1), y= Z1$fraction, type = "l")
 ```
  
@@ -644,7 +659,6 @@ cluster_table <- data.frame(ID = 1:50, Cluster = NA)
 Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
 Q2<- t(data_frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]))
 Q3<- as.data.frame(UL.ts.OTUs.RNA[,colSums(UL.ts.OTUs.RNA)>0])
-
 
 for (k in 2:50) {
   # Calculate the distance matrix
@@ -682,6 +696,7 @@ plot(clst.ts.rna.p)
 
 
 Plotting a cluster table to find best fits for patterns in RG.avg
+Made a loop to determine which cluster number is the best fit for the data set
 
 ```{r}
 # Create an empty table to store the cluster results
@@ -721,12 +736,17 @@ write.csv(cluster_table.avg, file= "/Users/tj/git/ul-spacetime/cluster_table/cls
 assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv"))
 
 plot(clst.ts.rna.p)
+
+
 ```
 
 
 
 
-Making clusters for k=18
+Making clusters for k=18,found to be best fir from the cluster table created previously.
+The aim of clustering was to see different types of activity pattern. Hopefully to recognize
+compensation VS complimentary activity patterns in the community. But ended up giving a clearer
+visual of seasonality trends.
 ```{r}
  dist_matrix <-vegdist(Q2, method = "jaccard")
 
@@ -769,8 +789,7 @@ OTU.ts.long |> filter(OTU %in% RG.avg.sb) |>
 
 
 
-
-
+Filtering based on abi=undance classes to reduce noise and see the patterns better
 Re-clustering after filtering based on abundance class 1
 ```{r}
 df<- as.data.frame(t(Q2))
@@ -1030,7 +1049,7 @@ OTU.ts.long |> filter(OTU %in% colnames(df.6)) |>
 
 Trying the same thing on "Seedbank"
 ```{r}
-df.1c<- Q3 |> select(any_of(clsfd.ac.1$OTU))
+df.1c<- Q3 |> select(any_of(clsfd.sb.5$OTU))
 dist_matrix.1c<- vegdist(t(df.1c), method= "jaccard")
 
 
@@ -1044,7 +1063,7 @@ if (any(is.na(dist_matrix.1c)) || any(is.infinite(dist_matrix.1c))) {
 hclust_result.1c <- hclust(dist_matrix.1c, method = "complete")
 
 # Obtain the clusters for the current iteration
-clusters.1c <- cutree(hclust_result.1c, k = 5)
+clusters.1c <- cutree(hclust_result.1c, k = 3)
 sill.1c<- silhouette(clusters.1c, dist = dist_matrix.1c)
 
 # Assign cluster names to the corresponding IDs
@@ -1067,4 +1086,43 @@ OTU.ts.long |> filter(OTU %in% colnames(df.1c)) |>
 ```
 
 
+Trying clustering based on rel. abundance
+```{r}
+R2<- t(data_frame(UL.ts.OTUs.RNA[,colSums(UL.ts.OTUs.RNA.PA)>0]))
+
+df.4r<- df |> select(any_of(clsfd.ac.4$OTU))
+dist_matrix.4r<- vegdist(t(df.4r), method= "jaccard")
+
+
+# Check for missing or infinite values
+if (any(is.na(dist_matrix.4r)) || any(is.infinite(dist_matrix.4r))) {
+  # Handle missing or infinite values
+  dist_matrix[is.na(dist_matrix.4r) | is.infinite(dist_matrix.4r)] <- 0  # Replace with 0 or any other appropriate value
+}
+
+# Perform hierarchical clustering
+hclust_result.4r <- hclust(dist_matrix.4r, method = "complete")
+
+# Obtain the clusters for the current iteration
+clusters.4r <- cutree(hclust_result.4r, k = 4)
+sill.4r<- silhouette(clusters.4r, dist = dist_matrix.4r)
+
+# Assign cluster names to the corresponding IDs
+names(clusters.4r) <- colnames(select(df.4r, any_of(clsfd.ac.4$OTU)))
+
+summary(sill.4r)$avg.width
+
+clusters.df.4r<- as.data.frame(clusters.4r)
+clusters.df.4r$OTU<- rownames(clusters.df.4r)
+
+           
+                                        
+
+OTU.ts.long |> filter(OTU %in% colnames(df.4r)) |> 
+  left_join(clusters.df.4r, by = "OTU") |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~clusters.4r)
+
+```
 
