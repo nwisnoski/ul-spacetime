@@ -528,3 +528,114 @@ OTU.ts.long |> filter(OTU %in% colnames(df.1)) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
 
+
+
+#Cluster loop code
+
+for (k in 2:50) {
+  # Calculate the distance matrix
+  dist_matrix <- vegdist(Q2, method = "jaccard")
+  
+  # Check for missing or infinite values
+  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
+    # Handle missing or infinite values
+    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
+  }
+  
+  # Perform hierarchical clustering
+  hclust_result <- hclust(dist_matrix, method = "complete")
+  
+  # Obtain the clusters for the current iteration
+  clusters <- cutree(hclust_result, k = k)
+  sill<- silhouette(clusters, dist = dist_matrix)
+  
+  # Assign cluster names to the corresponding IDs
+  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
+  
+  # Store the cluster results in the table
+  cluster_table$Cluster[k] <- summary(sill)$avg.width
+}
+
+
+plot(cluster_table)
+
+write.csv(cluster_table, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv", row.names = FALSE)
+
+assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv"))
+
+plot(clst.ts.rna.p)
+```
+
+
+Plotting a cluster table to find best fits for patterns in RG.avg
+
+```{r}
+# Create an empty table to store the cluster results
+cluster_table.avg <- data.frame(ID = 1:50, Cluster = NA)
+
+Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
+
+for (k in 2:50) {
+  # Calculate the distance matrix
+  dist_matrix <- vegdist(Q, method = "jaccard")
+  
+  # Check for missing or infinite values
+  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
+    # Handle missing or infinite values
+    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
+  }
+  
+  # Perform hierarchical clustering
+  hclust_result <- hclust(dist_matrix, method = "complete")
+  
+  # Obtain the clusters for the current iteration
+  clusters <- cutree(hclust_result, k = k)
+  sill<- silhouette(clusters, dist = dist_matrix)
+  
+  # Assign cluster names to the corresponding IDs
+  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
+  
+  # Store the cluster results in the table
+  cluster_table.avg$Cluster[k] <- summary(sill)$avg.width
+}
+
+
+plot(cluster_table.avg)
+
+write.csv(cluster_table.avg, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv", row.names = FALSE)
+
+assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv"))
+
+plot(clst.ts.rna.p)
+
+
+#filtering transact data fractionally
+RG.OTUs <- OTUs[str_which(rownames(OTUs), "RG"),]
+
+# separate RNA and DNA dynamics
+RG.OTUs.RNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGD"),]
+RG.OTUs.DNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGc"),]
+
+RG.OTUs.DNA.PA <- decostand(RG.OTUs.DNA + RG.OTUs.RNA, "pa")
+RG.OTUs.RNA.PA <- decostand(RG.OTUs.RNA, "pa")
+
+RG.1<- RG.OTUs.RNA.PA[1, RG.OTUs.RNA.PA[1,]==1, drop= FALSE]
+
+
+for (k in 1:18) {
+  
+  # Create a dynamic variable name
+  a <- paste("RG.", k, sep = "")
+  
+  b<- RG.OTUs.RNA.PA[k, RG.OTUs.RNA.PA[k, ] == 1, drop = FALSE]
+  
+  # Subset the data based on the dynamic variable name
+  assign(a, b[, colnames(b) %in% soil.taxa])
+  
+}
+
+name.3.2 <- clusters.3.2 |> filter(OTU %in% soil.taxa)
+
+name.2.2 <- clusters.2.2 |> filter(OTU %in% soil.taxa)
+
+

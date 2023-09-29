@@ -186,29 +186,6 @@ otu_trends_to_plot %>%
 
 
 
-Many of them do appear to track the seasons quite well, suggesting there could be a seasonality component to the role of terrestrial inputs into the reservoir.
-
-
-```{r}
-otu_trends_to_plot %>% 
-  group_by(OTU) %>% 
-  filter(mean(rel_abund) > 1e-3) %>% 
-  ggplot(aes(x = date, y = rel_abund + 1e-4, group = OTU, color = soils)) +
-  geom_point(alpha = .1) + 
-  geom_line(color = "blue",
-            alpha = 0.5) +
-  geom_line(stat = "smooth", se = FALSE, span = 0.5) +
-  geom_vline(aes(xintercept = as_date("2013-07-15"))) +
-  scale_y_log10() + 
-  scale_x_date(labels = scales::date_format(format = "%b %y")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facet_wrap(~OTU) +
-  labs(x = "",
-       y = "Relative abundance")
-
-```
-
-
 
 Proportion of Soil OTUs richness in the Seed bank, to be used later to identify 
 soil OTUs dormancy and activity patterns
@@ -276,11 +253,6 @@ RG.avg.soil.ac <- RG.middle.Ac[, which(colnames(RG.middle.Ac) %in% soil.taxa)]
 
 #OTUs never active
 RG.middle.DNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGD"),])))
-RG.middle.sb <- RG.middle.DNA |> 
-  select(where(~. >0)) |> 
-  select(!matches(RG.avg.ac))
-RG.avg.sb <- colnames(RG.middle.sb)
-RG.avg.soil.sb <- RG.middle.sb[, which(colnames(RG.middle.sb) %in% soil.taxa)]
 
  
 ```
@@ -307,19 +279,7 @@ RG.clsfd.ac <- RG.middle.Ac |>
 row.names(RG.clsfd.ac) <- names(RG.middle.Ac)
 RG.clsfd.ac<- rownames_to_column(RG.clsfd.ac, var = "OTU")
 
-RG.clsfd.sb<- RG.middle.sb |>
-  t() |> 
-  as_tibble() |> 
-  rename(rel.ab = V1) |> 
-  mutate(ab.class = if_else(rel.ab< exp(-10), 6, 
-                            if_else(rel.ab < exp(-9), 5, 
-                            if_else(rel.ab < exp(-8), 4, 
-                                    if_else(rel.ab < exp(-6), 3, 
-                                            if_else(rel.ab < exp(-4), 2, 
-                                                    if_else(rel.ab < exp(-2), 1, 12)))))))
 
-row.names(RG.clsfd.sb) <- names(RG.middle.sb)
-RG.clsfd.sb<- rownames_to_column(RG.clsfd.sb, var = "OTU")
 ```
 
 
@@ -430,179 +390,6 @@ aq.ac.6<- OTU.tax |>
 
 
 
-Plotting the same in seed bank, *caution: seed bank is purely theoretical and might 
-not give an accurate representation
-```{r}
-OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% soil.taxa) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  filter(!OTU %in% soil.taxa) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-#getting taxonomy of different rel. abundance classes
-
-clsfd.sb.1<- filter(RG.clsfd.sb, ab.class == 1)
-so.sb.1<- OTU.tax |> 
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.1$OTU)
-
-aq.sb.1<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.1$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-clsfd.sb.2<- filter(RG.clsfd.sb, ab.class == 2)
-so.sb.2<- OTU.tax |>
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.2$OTU)
-
-aq.sb.2<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.2$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-clsfd.sb.3<- filter(RG.clsfd.sb, ab.class == 3)
-so.sb.3<- OTU.tax |>
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.3$OTU)
-
-aq.sb.3<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.3$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-clsfd.sb.4<- filter(RG.clsfd.sb, ab.class == 4)
-so.sb.4<- OTU.tax |>
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.4$OTU)
-
-aq.sb.4<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.4$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-clsfd.sb.5<- filter(RG.clsfd.sb, ab.class == 5)
-so.sb.5<- OTU.tax |> 
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.5$OTU)
-
-aq.sb.5<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.5$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-clsfd.sb.6<- filter(RG.clsfd.sb, ab.class == 6)
-so.sb.6<- OTU.tax |> 
-  filter( OTU %in% soil.taxa) |>
-  filter(OTU %in% clsfd.sb.6$OTU)
-
-aq.sb.6<- OTU.tax |> 
-  filter(OTU %in% clsfd.sb.6$OTU) |> 
-  filter(!OTU %in% soil.taxa)
-
-  
-
-```
-
- 
-
-
-OTUs Filtered by abundance in soil, to further filter some noise and be able to 
-see better activity patterns and seasonality. Also, if differnt classes behaved differently.
-Thre idea was that rare in soils would be more abundand in aquatic communities
-
-```{r}
-OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
-  filter(OTU %in% common.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
-  filter(OTU %in% rare.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% common.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% rare.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-```
-
-
-
-Looking into seedbank dynamics classified by dominance in soil samples.
-To see if different dominant classes are present in the seed bank.
-
-```{r}
-#making seedbank long form
-
-SB.ts.OTUs <- colnames(SB.ts.OTUs.PA)[colSums(SB.ts.OTUs.PA) > 0]
-UL.ts.OTUs.sb<- UL.ts.OTUs.DNA[, colnames(UL.ts.OTUs.DNA) %in% SB.ts.OTUs]
-
-
-OTU.ts.long.sb<- UL.ts.OTUs.sb |>
-  as_tibble() |> 
-  rownames_to_column( var= "sample.id" ) |> 
-  mutate(sample.id= as.integer(sample.id)) |> 
-  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
-  left_join(env.ts.data, by= "sample.id" )
-
-OTU.ts.long.sb |> filter(OTU %in% RG.avg.ac) |> 
-  filter(OTU %in% common.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long.sb |> filter(OTU %in% RG.avg.ac) |> 
-  filter(OTU %in% rare.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long.sb |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% common.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-
-OTU.ts.long.sb |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% rare.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
-```
-
-  
 
 
 
@@ -642,10 +429,7 @@ plot(x= rownames(Y), y= Y$fraction, type = "l")
 Y1<- data_frame(fraction= rowSums(UL.ts.OTUs.DNA.PA)/83343)#ALl
 plot(x= rownames(Y1), y= Y1$fraction, type = "l")
 
-Z<- data_frame(fraction= rowSums(SB.ts.OTUs.PA[,colSums(SB.ts.OTUs.PA)>0])/12130) #Present
-plot(x= rownames(Z), y= Z$fraction, type = "l")
-Z1<- data_frame(fraction= rowSums(SB.ts.OTUs.PA)/83343) #All
-plot(x= rownames(Z1), y= Z1$fraction, type = "l")
+
 ```
  
   
@@ -660,86 +444,8 @@ Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
 Q2<- t(data_frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]))
 Q3<- as.data.frame(UL.ts.OTUs.RNA[,colSums(UL.ts.OTUs.RNA)>0])
 
-for (k in 2:50) {
-  # Calculate the distance matrix
-  dist_matrix <- vegdist(Q2, method = "jaccard")
-  
-  # Check for missing or infinite values
-  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
-    # Handle missing or infinite values
-    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
-  }
-  
-  # Perform hierarchical clustering
-  hclust_result <- hclust(dist_matrix, method = "complete")
-  
-  # Obtain the clusters for the current iteration
-  clusters <- cutree(hclust_result, k = k)
-  sill<- silhouette(clusters, dist = dist_matrix)
-  
-  # Assign cluster names to the corresponding IDs
-  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) > 0])
-  
-  # Store the cluster results in the table
-  cluster_table$Cluster[k] <- summary(sill)$avg.width
-}
-
-
-plot(cluster_table)
-
-write.csv(cluster_table, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv", row.names = FALSE)
-
-assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.p.csv"))
-
-plot(clst.ts.rna.p)
-```
-
-
-Plotting a cluster table to find best fits for patterns in RG.avg
-Made a loop to determine which cluster number is the best fit for the data set
-
-```{r}
-# Create an empty table to store the cluster results
-cluster_table.avg <- data.frame(ID = 1:50, Cluster = NA)
-
-Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
-
-for (k in 2:50) {
-  # Calculate the distance matrix
-  dist_matrix <- vegdist(Q, method = "jaccard")
-  
-  # Check for missing or infinite values
-  if (any(is.na(dist_matrix)) || any(is.infinite(dist_matrix))) {
-    # Handle missing or infinite values
-    dist_matrix[is.na(dist_matrix) | is.infinite(dist_matrix)] <- 0  # Replace with 0 or any other appropriate value
-  }
-  
-  # Perform hierarchical clustering
-  hclust_result <- hclust(dist_matrix, method = "complete")
-  
-  # Obtain the clusters for the current iteration
-  clusters <- cutree(hclust_result, k = k)
-  sill<- silhouette(clusters, dist = dist_matrix)
-  
-  # Assign cluster names to the corresponding IDs
-  names(clusters) <- colnames(UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
-  
-  # Store the cluster results in the table
-  cluster_table.avg$Cluster[k] <- summary(sill)$avg.width
-}
-
-
-plot(cluster_table.avg)
-
-write.csv(cluster_table.avg, file= "/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv", row.names = FALSE)
-
-assign("clst.ts.rna.p", read.csv("/Users/tj/git/ul-spacetime/cluster_table/clst.ts.rna.avg.csv"))
-
-plot(clst.ts.rna.p)
-
 
 ```
-
 
 
 
@@ -778,18 +484,11 @@ OTU.ts.long |> filter(OTU %in% colnames(df)) |>
   geom_line(alpha = 0.3)+
   facet_wrap(~clusters)
 
-OTU.ts.long |> filter(OTU %in% RG.avg.sb) |> 
-  filter(OTU %in% rare.in.soils) |>
-  left_join(RG.clsfd.sb, by = "OTU") |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~ab.class)
 ```
 
 
 
-Filtering based on abi=undance classes to reduce noise and see the patterns better
+Filtering based on abundance classes to reduce noise and see the patterns better
 Re-clustering after filtering based on abundance class 1
 ```{r}
 df<- as.data.frame(t(Q2))
@@ -873,6 +572,17 @@ OTU.ts.long |> filter(OTU %in% colnames(df.2)) |>
   geom_line(alpha = 0.3)+
   facet_wrap(~clusters.2, scales = "free_y")
 
+#selecting OTU names for cluster 2
+clusters.2<- as.data.frame(clusters.2)
+clusters.2.2 <- as.data.frame(rownames(clusters.2[clusters.2$clusters.2 == 2, , drop= FALSE]))
+colnames(clusters.2.2) <- "OTU"
+
+
+OTU.ts.long |> filter(OTU %in% names(RG.14)) |>
+  filter(OTU %in% clusters.2.2[,1]) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)
+
 
 ```
 
@@ -917,6 +627,17 @@ OTU.ts.long |> filter(OTU %in% colnames(df.3)) |>
   geom_line(alpha = 0.3)+
   facet_wrap(~clusters.3)
 
+#selecting OTU names for cluster 2
+clusters.3<- as.data.frame(clusters.3)
+clusters.3.2 <- as.data.frame(rownames(clusters.3[clusters.3$clusters.3 == 2, , drop= FALSE]))
+colnames(clusters.3.2) <- "OTU"
+
+#interesting
+
+OTU.ts.long |> filter(OTU %in% names(RG.14)) |>
+  filter(OTU %in% clusters.3.2[,1]) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)
 
 ```
 
@@ -1047,43 +768,7 @@ OTU.ts.long |> filter(OTU %in% colnames(df.6)) |>
 
 
 
-Trying the same thing on "Seedbank"
-```{r}
-df.1c<- Q3 |> select(any_of(clsfd.sb.5$OTU))
-dist_matrix.1c<- vegdist(t(df.1c), method= "jaccard")
 
-
-# Check for missing or infinite values
-if (any(is.na(dist_matrix.1c)) || any(is.infinite(dist_matrix.1c))) {
-  # Handle missing or infinite values
-  dist_matrix[is.na(dist_matrix.1c) | is.infinite(dist_matrix.1c)] <- 0  # Replace with 0 or any other appropriate value
-}
-
-# Perform hierarchical clustering
-hclust_result.1c <- hclust(dist_matrix.1c, method = "complete")
-
-# Obtain the clusters for the current iteration
-clusters.1c <- cutree(hclust_result.1c, k = 3)
-sill.1c<- silhouette(clusters.1c, dist = dist_matrix.1c)
-
-# Assign cluster names to the corresponding IDs
-names(clusters.1c) <- colnames(select(Q3, any_of(clsfd.ac.1$OTU)))
-
-summary(sill.1c)$avg.width
-
-clusters.df.1c<- as.data.frame(clusters.1c)
-clusters.df.1c$OTU<- rownames(clusters.df.1c)
-
-           
-                                        
-
-OTU.ts.long |> filter(OTU %in% colnames(df.1c)) |> 
-  left_join(clusters.df.1c, by = "OTU") |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  facet_wrap(~clusters.1c)
-
-```
 
 
 Trying clustering based on rel. abundance
@@ -1123,6 +808,59 @@ OTU.ts.long |> filter(OTU %in% colnames(df.4r)) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)+
   facet_wrap(~clusters.4r)
+
+```
+
+
+
+
+Plotting soil OTUs detected in transect from soil DNA and RNA
+
+```{r}
+
+
+RG.all <- unique(c(names(RG.1),names(RG.2),names(RG.3),names(RG.4),names(RG.5),names(RG.6),names(RG.7),
+  names(RG.8),names(RG.9),names(RG.10),names(RG.11),names(RG.12),names(RG.13),names(RG.14),names(RG.15),
+            names(RG.16),names(RG.17),names(RG.18)))
+
+OTU.ts.long |> filter( OTU %in% RG.all) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)
+
+#902 soil OTUs active in transect got captured in RNA pool of the time series
+
+
+RG.D.all <- unique(c(names(RG.D1),names(RG.D2),names(RG.D3),names(RG.D4),names(RG.D5),
+                      names(RG.D6),
+                     names(RG.D7),names(RG.D8),names(RG.D9),names(RG.D10),names(RG.D11),
+                     names(RG.D12),names(RG.D13), names(RG.D14),names(RG.D15),
+            names(RG.D16),names(RG.D17),names(RG.D18)))
+
+OTU.ts.long |> filter( OTU %in% RG.D.all) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)
+
+#942 soil OTUs in transect DNA got captured in RNA pool of the time series
+
+
+
+AAC<- UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) >0]
+
+AAA<- AAC[,colnames(AAC) %in% RG.D.all]
+
+AAB<- AAC[,colnames(AAC) %in% soil.taxa]
+
+OTU.ts.long |> filter( OTU %in% colnames(AAA)) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+sample(colnames(AAA), size = 25, replace = FALSE)
+
+OTU.ts.long |> filter( OTU %in% sample(colnames(AAA), size = 25, replace = FALSE)) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ OTU, scales = "free_y")
 
 ```
 
