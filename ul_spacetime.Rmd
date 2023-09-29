@@ -417,6 +417,8 @@ Trying to see the same fractional activity patterns in RNA, DNA, SB datasets
 The significant difference between OTUs that were ever present vs all OTUs raises the
 question of wether those other OTUs should even be focused on that were never even detected in the data sets
 If not detected then, where are they coming from????
+
+**It's from the set of all OTUs that's why 
  
 ```{r}
 X<- data_frame(fraction= rowSums(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0])/11824) #Present
@@ -433,12 +435,11 @@ plot(x= rownames(Y1), y= Y1$fraction, type = "l")
 ```
  
   
-Plotting a cluster table to find best fits for patterns in ts.RNA 
+
+filtering data frames to use for clustering
 
 ```{r}
 
-# Create an empty table to store the cluster results
-cluster_table <- data.frame(ID = 1:50, Cluster = NA)
 
 Q<- t(UL.ts.OTUs.RNA.PA[ ,colnames(UL.ts.OTUs.RNA.PA) %in% RG.avg.ac])
 Q2<- t(data_frame(UL.ts.OTUs.RNA.PA[,colSums(UL.ts.OTUs.RNA.PA)>0]))
@@ -449,7 +450,7 @@ Q3<- as.data.frame(UL.ts.OTUs.RNA[,colSums(UL.ts.OTUs.RNA)>0])
 
 
 
-Making clusters for k=18,found to be best fir from the cluster table created previously.
+Making clusters for k=18,found to be best fit from the cluster table created previously.
 The aim of clustering was to see different types of activity pattern. Hopefully to recognize
 compensation VS complimentary activity patterns in the community. But ended up giving a clearer
 visual of seasonality trends.
