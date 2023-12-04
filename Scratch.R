@@ -640,45 +640,6 @@ name.2.2 <- clusters.2.2 |> filter(OTU %in% soil.taxa)
 
 sample(colnames(AAB), size = 25, replace = FALSE) #code for random sampling
 
-#RG.all
-[1] 16
-[1] 17
-[1] 8
-[1] 75
-[1] 33
-[1] 58
-[1] 14
-[1] 19
-[1] 32
-[1] 54
-[1] 18
-[1] 25
-[1] 30
-[1] 28
-[1] 26
-[1] 10
-[1] 64
-[1] 23
-
-#RG.D.all
-[1] 40
-[1] 50
-[1] 69
-[1] 104
-[1] 85
-[1] 101
-[1] 160
-[1] 89
-[1] 124
-[1] 144
-[1] 214
-[1] 344
-[1] 111
-[1] 118
-[1] 298
-[1] 157
-[1] 173
-[1] 426
 
 
 #code to load and save an excel sheet as a tibble
@@ -687,3 +648,15 @@ library(readxl)
 ul.dna.soilotus.always <- read_excel("/Users/tj/Desktop/Research/Microbial Ecology/sortedotus.xlsx", 
                                      sheet = "ul.dna.soilotus.always")
 
+#soil classification
+
+RG.clsfd.ac <- RG.middle.Ac |>
+  t() |>
+  as_tibble() |> 
+  rename(rel.ab = V1) |> 
+  mutate(ab.class = if_else(rel.ab< exp(-10), 6, 
+                            if_else(rel.ab < exp(-9), 5, 
+                                    if_else(rel.ab < exp(-8), 4, 
+                                            if_else(rel.ab < exp(-6), 3, 
+                                                    if_else(rel.ab < exp(-4), 2, 
+                                                            if_else(rel.ab < exp(-2), 1, 12)))))))
