@@ -432,3 +432,45 @@ OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS.R[,1:30])) |>
 
 ```
 
+
+Attempting to Classify activity patterns based on metrics.
+```{r}
+RG.D.APS<- tibble( OTU= colnames(UL.OTUs.RNA.APS))
+
+sorted.otu.clfd<- RG.D.APS |> 
+  mutate(active = if_else(colSums(UL.OTUs.RNA.APS)/124 > 0.9, "always", 
+                          if_else(colSums(UL.OTUs.RNA.APS)/124 < 0.1, "blips", "seasonal")))
+sorted.otu.clfd |> count(active)
+
+sorted.otu.always<- sorted.otu.clfd |> 
+  filter(active== "always")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.always$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+sorted.otu.seasonal<- sorted.otu.clfd |> 
+  filter(active== "seasonal")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+sorted.otu.blips<- sorted.otu.clfd |> 
+  filter(active== "blips")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+```
+
