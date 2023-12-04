@@ -648,7 +648,7 @@ library(readxl)
 ul.dna.soilotus.always <- read_excel("/Users/tj/Desktop/Research/Microbial Ecology/sortedotus.xlsx", 
                                      sheet = "ul.dna.soilotus.always")
 
-#soil classification
+#soil classification code
 
 RG.clsfd.ac <- RG.middle.Ac |>
   t() |>
