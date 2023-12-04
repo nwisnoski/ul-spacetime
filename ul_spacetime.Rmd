@@ -44,7 +44,7 @@ library(viridis)
 library(lubridate)
 library(cluster)
 library(dtwclust)
-
+library(readxl)
 
 
 
@@ -106,8 +106,10 @@ OTU.tax <- read.tax(taxonomy = taxon, format = "rdp")
 
 #OTUs <- OTUs[str_which(rownames(OTUs), "RG"),]
 OTUs <- OTUs[-which(rownames(OTUs) == "RGMockComm"),]
+set.seed(12742899)
 
 OTUs <- rrarefy(OTUs, min(rowSums(OTUs)))
+print(length(which(OTUs == 0)))  #23630524
 OTUs.REL <- decostand(OTUs, "total")
 ```
 
@@ -476,8 +478,8 @@ clusters.df$OTU<- rownames(clusters.df)
 clusters.df<- clusters.df |> 
   mutate(clusters= as.factor(clusters))
 clusters.df |> group_by(clusters) |> 
-  count(OTU) |> 
-  summarise(sum(count))
+  count(OTU) 
+  
 
 OTU.ts.long |> filter(OTU %in% colnames(df)) |> 
   left_join(clusters.df, by = "OTU") |>
@@ -579,7 +581,7 @@ clusters.2.2 <- as.data.frame(rownames(clusters.2[clusters.2$clusters.2 == 2, , 
 colnames(clusters.2.2) <- "OTU"
 
 
-OTU.ts.long |> filter(OTU %in% names(RG.14)) |>
+OTU.ts.long |> filter(OTU %in% names(df.2)) |>
   filter(OTU %in% clusters.2.2[,1]) |> 
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
@@ -635,7 +637,7 @@ colnames(clusters.3.2) <- "OTU"
 
 #interesting
 
-OTU.ts.long |> filter(OTU %in% names(RG.14)) |>
+OTU.ts.long |> filter(OTU %in% names(df.3)) |>
   filter(OTU %in% clusters.3.2[,1]) |> 
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
@@ -819,49 +821,205 @@ Plotting soil OTUs detected in transect from soil DNA and RNA
 
 ```{r}
 
+#filtering transact data fractionally
+RG.OTUs <- OTUs[str_which(rownames(OTUs), "RG"),] 
+print(length(which(RG.OTUs == 0))) #3234533 
+
+# separate RNA and DNA dynamics
+RG.OTUs.RNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGc"),] 
+print(length(which(RG.OTUs.RNA == 0))) #1498062 
+
+RG.OTUs.DNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGD"),] 
+print(length(which(RG.OTUs.DNA == 0))) #1491145 
+ 
+
+RG.OTUs.DNA.PA <- decostand(RG.OTUs.DNA + RG.OTUs.RNA, "pa") 
+print(length(which(RG.OTUs.DNA.PA == 1))) #10082
+print(length(which(RG.OTUs.DNA.PA == 0))) #1490092
+
+RG.OTUs.RNA.PA <- decostand(RG.OTUs.RNA, "pa") 
+print(length(which(RG.OTUs.RNA.PA == 1))) #2112 
+print(length(which(RG.OTUs.RNA.PA == 0))) #1498062
+
+RG.OTUs.DNA2.PA <- decostand(RG.OTUs.DNA, "pa") 
+print(length(which(RG.OTUs.DNA2.PA == 1))) #9029 
+print(length(which(RG.OTUs.DNA2.PA == 0))) #1491145
+
+RG.1<- RG.OTUs.RNA.PA[1, RG.OTUs.RNA.PA[1,]==1, drop= FALSE]
+
+
+for (k in 1:18) {
+  
+  # Create a dynamic variable name
+  a <- paste("RG.", k, sep = "")
+  
+  b<- RG.OTUs.RNA.PA[k, RG.OTUs.RNA.PA[k, ] == 1, drop = FALSE]
+  
+  # Subset the data based on the dynamic variable name
+  assign(a, b[, colnames(b) %in% soil.taxa])
+  
+}
+
 
 RG.all <- unique(c(names(RG.1),names(RG.2),names(RG.3),names(RG.4),names(RG.5),names(RG.6),names(RG.7),
   names(RG.8),names(RG.9),names(RG.10),names(RG.11),names(RG.12),names(RG.13),names(RG.14),names(RG.15),
             names(RG.16),names(RG.17),names(RG.18)))
+#220
+for (k in 1:18) {
+  a<- paste("RG.", k, sep = "")
+print(length(which(get(a) == 1)))
+}
+
+
 
 OTU.ts.long |> filter( OTU %in% RG.all) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
 
-#902 soil OTUs active in transect got captured in RNA pool of the time series
 
+
+for (k in 1:18) {
+  
+  # Create a dynamic variable name
+  a <- paste("RG.D", k, sep = "")
+  
+  b<- RG.OTUs.DNA.PA[k, RG.OTUs.DNA.PA[k, ] == 1, drop = FALSE]
+  
+  # Subset the data based on the dynamic variable name
+  assign(a, b[, colnames(b) %in% soil.taxa])
+  
+}
 
 RG.D.all <- unique(c(names(RG.D1),names(RG.D2),names(RG.D3),names(RG.D4),names(RG.D5),
                       names(RG.D6),
                      names(RG.D7),names(RG.D8),names(RG.D9),names(RG.D10),names(RG.D11),
                      names(RG.D12),names(RG.D13), names(RG.D14),names(RG.D15),
             names(RG.D16),names(RG.D17),names(RG.D18)))
+#957
+
+for (k in 1:18) {
+  a<- paste("RG.D", k, sep = "")
+print(length(which(get(a) == 1)))
+}
+
 
 OTU.ts.long |> filter( OTU %in% RG.D.all) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
 
-#942 soil OTUs in transect DNA got captured in RNA pool of the time series
 
 
 
-AAC<- UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) >0]
+UL.OTUs.RNA.AP<- UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) >0]
 
-AAA<- AAC[,colnames(AAC) %in% RG.D.all]
 
-AAB<- AAC[,colnames(AAC) %in% soil.taxa]
+UL.OTUs.RNA.APS<- UL.OTUs.RNA.AP[,colnames(UL.OTUs.RNA.AP) %in% RG.D.all]
+#536
 
-OTU.ts.long |> filter( OTU %in% colnames(AAA)) |>
+
+OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS)) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)+
   scale_y_log10()
 
-sample(colnames(AAA), size = 25, replace = FALSE)
 
-OTU.ts.long |> filter( OTU %in% sample(colnames(AAA), size = 25, replace = FALSE)) |>
+
+OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS[,31:60])) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)+
   facet_wrap(~ OTU, scales = "free_y")
+
+
+```
+Studying Sorted Soil Soil OTUs in Time series
+
+Loading objects
+```{r}
+ul.dna.soilotus.always <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.always")
+
+ul.dna.soilotus.blips <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.blips")
+
+ul.dna.soilotus.fh <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.fh")
+
+ul.dna.soilotus.s1 <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.s1")
+
+ul.dna.soilotus.s2 <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.s2")
+
+ul.dna.soilotus.s3 <- read_excel("/Users/tj/Library/CloudStorage/OneDrive-MississippiStateUniversity/Research/Microbial ecology/sortedotus.xlsx", sheet = "ul.dna.soilotus.s3")
+
+```
+
+
+
+Looking at Dynamics
+```{r}
+OTU.ts.long |> filter( OTU %in% ul.dna.soilotus.always$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+OTU.ts.long |> filter( OTU %in% ul.dna.soilotus.blips$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+OTU.ts.long |> filter( OTU %in% (ul.dna.soilotus.always[1:50,])$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ OTU, scales = "free_y")
+
+```
+
+
+
+Trying to plot the PA data in long form
+```{r}
+OTU.ts.long.pa<- UL.ts.OTUs.RNA.PA |> as_tibble() |> 
+  rownames_to_column( var= "sample.id" ) |> 
+  mutate(sample.id= as.integer(sample.id)) |> 
+  pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
+  left_join(env.ts.data, by= "sample.id" )
+
+OTU.ts.long.pa |> filter( OTU %in% ul.dna.soilotus.always$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  #scale_y_log10()+
+  facet_wrap(~OTU)
+
+OTU.ts.long.pa |> filter( OTU %in% ul.dna.soilotus.fh$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()+
+  facet_wrap(~OTU)
+
+OTU.ts.long.pa |> filter( OTU %in% (ul.dna.soilotus.blips[1:50,])$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ OTU, scales = "free_y")
+
+
+```
+
+
+
+Sorting from RNA transect data and their activity in the time series
+```{r}
+
+UL.OTUs.RNA.APS.R<- as.data.frame(UL.OTUs.RNA.AP[,colnames(UL.OTUs.RNA.AP) %in% RG.all])
+
+OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS.R)) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  scale_y_log10()
+
+
+
+OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS.R[,1:30])) |>
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ OTU, scales = "free_y")
+
+
 
 ```
 
