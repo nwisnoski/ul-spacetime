@@ -346,7 +346,7 @@ OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS[,31:60])) |>
 
 ```
 Studying Sorted Soil Soil OTUs in Time series
-
+(these were manually sorted)
 Loading objects
 ```{r}
 ul.dna.soilotus.always <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.always")
@@ -456,7 +456,7 @@ OTU.ts.long.pa |> filter(OTU %in% sorted.otu.always$OTU) |>
 sorted.otu.seasonal<- sorted.otu.clfd |> 
   filter(active== "seasonal")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal[91:105,]$OTU) |>
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal[1:35,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
@@ -466,7 +466,7 @@ OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal[91:105,]$OTU) |>
 sorted.otu.blips<- sorted.otu.clfd |> 
   filter(active== "blips")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips[400:450,]$OTU) |>
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips[1:35,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
@@ -550,6 +550,15 @@ ggplot(data= blips.abundance, aes(x= sample.id, y= relative.abundance), group= s
 
 Trying to figure out if these sorted OTUs are rare or common in aquatic community
 ```{r}
+
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+
 OTU.ts.long |> 
   filter(OTU %in% new.sorted.otu.always$OTU) |> 
   mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
@@ -559,12 +568,7 @@ OTU.ts.long |>
   scale_y_continuous(limits = c(-0.5, 1.5))+
   theme_minimal()
 
-OTU.ts.long |> 
-  filter(OTU %in% new.sorted.otu.always$OTU) |> 
-  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
-  geom_line( alpha =0.3)+
-  facet_wrap(~ OTU)+
-  theme_minimal()
+
 
 OTU.ts.long |> 
   filter(OTU %in% new.sorted.otu.seasonal$OTU) |> 
