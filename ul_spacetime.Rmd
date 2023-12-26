@@ -258,7 +258,8 @@ RG.OTUs.DNA2.PA <- decostand(RG.OTUs.DNA, "pa")
 print(length(which(RG.OTUs.DNA2.PA == 1))) #9029 
 print(length(which(RG.OTUs.DNA2.PA == 0))) #1491145
 
-RG.1<- RG.OTUs.RNA.PA[1, RG.OTUs.RNA.PA[1,]==1, drop= FALSE]
+#RG.1<- RG.OTUs.RNA.PA[1, RG.OTUs.RNA.PA[1,]==1, drop= FALSE]
+#sample code to use in the loop
 
 
 for (k in 1:18) {
@@ -455,7 +456,7 @@ OTU.ts.long.pa |> filter(OTU %in% sorted.otu.always$OTU) |>
 sorted.otu.seasonal<- sorted.otu.clfd |> 
   filter(active== "seasonal")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal$OTU) |>
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal[91:105,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
@@ -465,12 +466,122 @@ OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal$OTU) |>
 sorted.otu.blips<- sorted.otu.clfd |> 
   filter(active== "blips")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips$OTU) |>
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips[400:450,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
   scale_y_continuous( limits = c(-0.5,1.5))+
   theme_minimal()
 
+```
+
+
+
+
+Manually reassigned metric classified OTU to correct for patterns based on sustained activity
+```{r}
+new.sorted.otu.always <- read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "always")
+new.sorted.otu.seasonal <- read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "seasonal")
+new.sorted.otu.blips <- read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "blips")
+
+```
+
+
+
+Visualizing re-sorted OTUs
+```{r}
+
+
+OTU.ts.long.pa |> filter(OTU %in% new.sorted.otu.always$OTU) |> 
+  ggplot(aes(x = sample.id, y= relative.abundance, group= OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limits= c(-0.5,1.5))+
+  theme_minimal()
+
+OTU.ts.long.pa |> filter(OTU %in% new.sorted.otu.seasonal$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limit = c(-0.5, 1.5))+
+  theme_minimal()
+
+OTU.ts.long.pa |> filter(OTU %in% new.sorted.otu.blips[31:60,]$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limit = c(-0.5, 1.5))+
+  theme_minimal()
+```
+
+
+
+Attempting to visualize the %contribution of the sorted OTUs to the dynamic active community
+i.e if they were rare or common and what % of the active abundance did they make up
+Only inspecting the RNA pool of the time series
+```{r}
+
+always.abundance<- aggregate(relative.abundance ~ sample.id, 
+                                   data = filter(OTU.ts.long, OTU %in% new.sorted.otu.always$OTU),
+                                   FUN = sum)
+ggplot(data= always.abundance, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+seasonal.abundance<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% new.sorted.otu.seasonal$OTU),
+                                   FUN = sum)
+ggplot(data= seasonal.abundance, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+blips.abundance<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% new.sorted.otu.blips$OTU),
+                                   FUN = sum)
+ggplot(data= blips.abundance, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+```
+
+
+
+Trying to figure out if these sorted OTUs are rare or common in aquatic community
+```{r}
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.seasonal$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.blips[91:120,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
 ```
 
