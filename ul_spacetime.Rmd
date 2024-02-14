@@ -45,7 +45,7 @@ library(lubridate)
 library(cluster)
 library(dtwclust)
 library(readxl)
-
+library(writexl)
 
 
 source("bin/mothur_tools.R")
@@ -544,6 +544,11 @@ ggplot(data= blips.abundance, aes(x= sample.id, y= relative.abundance), group= s
   geom_line( alpha= 0.3)+
   theme_minimal()
 
+
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.always$OTU))
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.seasonal$OTU))
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.blips$OTU))
+
 ```
 
 
@@ -581,6 +586,133 @@ OTU.ts.long |>
 
 OTU.ts.long |> 
   filter(OTU %in% new.sorted.otu.blips[91:120,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+```
+
+
+
+
+
+
+Attempting to sort aquatic OTUs in the time series, i.e. OTUs not detected in soil samples
+```{r}
+
+UL.OTUs.RNA.APA<- UL.OTUs.RNA.AP[,!(colnames(UL.OTUs.RNA.AP) %in% RG.D.all)]
+
+UL.OTUs.APA<- tibble( OTU= colnames(UL.OTUs.RNA.APA))
+
+sorted.otu.clfd.a<- UL.OTUs.APA |> 
+  mutate(active = if_else(colSums(UL.OTUs.RNA.APA)/124 > 0.9, "always", 
+                          if_else(colSums(UL.OTUs.RNA.APA)/124 < 0.1, "blips", "seasonal")))
+sorted.otu.clfd.a |> count(active)
+write_xlsx(sorted.otu.clfd.a, "sorted.otu.clfd.a.xlsx")
+sorted.otu.always.a<- sorted.otu.clfd.a |> 
+  filter(active== "always")
+write_xlsx(sorted.otu.always.a, "sorted.otu.always.a.xlsx")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.always.a$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+sorted.otu.seasonal.a<- sorted.otu.clfd.a |> 
+  filter(active== "seasonal")
+write_xlsx(sorted.otu.seasonal.a, "sorted.otu.seasonal.a.xlsx")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal.a[481:520,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+sorted.otu.blips.a<- sorted.otu.clfd.a |> 
+  filter(active== "blips")
+write_xlsx(sorted.otu.blips.a, "sorted.otu.blips.a.xlsx")
+
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips.a[101:200,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+```
+
+
+
+%contribution
+```{r}
+always.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data = filter(OTU.ts.long, OTU %in% sorted.otu.always.a$OTU),
+                                   FUN = sum)
+ggplot(data= always.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+seasonal.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% sorted.otu.seasonal.a$OTU),
+                                   FUN = sum)
+ggplot(data= seasonal.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+blips.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% sorted.otu.blips.a$OTU),
+                                   FUN = sum)
+ggplot(data= blips.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.always$OTU))
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.seasonal$OTU))
+#view(filter(OTU.tax, OTU %in% new.sorted.otu.blips$OTU))
+```
+
+
+rare or common
+```{r}
+OTU.ts.long |> 
+  filter(OTU %in% sorted.otu.always.a$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+
+OTU.ts.long |> 
+  filter(OTU %in% sorted.otu.always.a$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+
+
+OTU.ts.long |> 
+  filter(OTU %in% sorted.otu.seasonal.a[20:50,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+OTU.ts.long |> 
+  filter(OTU %in% sorted.otu.blips.a[450:500,]$OTU) |> 
   mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
   ggplot(aes(x= sample.id, y= type, group= OTU))+
   geom_line( alpha =0.3)+
