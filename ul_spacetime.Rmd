@@ -626,7 +626,7 @@ sorted.otu.seasonal.a<- sorted.otu.clfd.a |>
   filter(active== "seasonal")
 write_xlsx(sorted.otu.seasonal.a, "sorted.otu.seasonal.a.xlsx")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal.a[481:520,]$OTU) |>
+OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal.a[661:690,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
@@ -681,7 +681,7 @@ ggplot(data= blips.abundance.a, aes(x= sample.id, y= relative.abundance), group=
 ```
 
 
-rare or common
+aquatic OG rare or common
 ```{r}
 OTU.ts.long |> 
   filter(OTU %in% sorted.otu.always.a$OTU) |> 
@@ -719,5 +719,321 @@ OTU.ts.long |>
   facet_wrap(~ OTU)+
   scale_y_continuous(limits = c(-0.5, 1.5))+
   theme_minimal()
+```
+
+
+loading re-sorted aquatic otus
+```{r}
+new.always.a <- read_csv("aquatic_otu_activity_pattern/new.always.a.csv")
+new.seasonal.a <- read_csv("aquatic_otu_activity_pattern/new.seasonal.a.csv")
+new.blips.a <- read_csv("aquatic_otu_activity_pattern/new.blips.a.csv")
+```
+
+
+
+plotting re-sorted aquatic otus
+```{r}
+
+OTU.ts.long.pa |> filter(OTU %in% new.always.a$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+OTU.ts.long.pa |> filter(OTU %in% new.seasonal.a[1:30,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+OTU.ts.long.pa |> filter(OTU %in% new.blips.a[1:30,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+```
+
+
+
+new aquatic %contributions
+```{r}
+new.always.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data = filter(OTU.ts.long, OTU %in% new.always.a$OTU),
+                                   FUN = sum)
+ggplot(data= new.always.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+new.seasonal.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% new.seasonal.a$OTU),
+                                   FUN = sum)
+ggplot(data= new.seasonal.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+new.blips.abundance.a<- aggregate(relative.abundance ~ sample.id, 
+                                   data =filter(OTU.ts.long, OTU %in% new.blips.a$OTU),
+                                   FUN = sum)
+ggplot(data= new.blips.abundance.a, aes(x= sample.id, y= relative.abundance), group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+```
+
+
+new aquatic rare or common
+```{r}
+OTU.ts.long |> 
+  filter(OTU %in% new.always.a$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+
+OTU.ts.long |> 
+  filter(OTU %in% new.always.a$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+
+
+OTU.ts.long |> 
+  filter(OTU %in% new.seasonal.a[20:50,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+OTU.ts.long |> 
+  filter(OTU %in% new.blips.a[450:500,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+```
+
+
+
+
+what in %contribution is coming from rare or common OTUs
+
+for always OTU
+```{r}
+
+OTU.ts.long<- OTU.ts.long |> 
+  mutate(abundance.type= if_else(relative.abundance >= 0.001, 1, 0))
+
+always.common.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+                             FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+always.rare.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+always.abundance.soil.otus <- always.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(always.common.abundance, by = 'sample.id') |>
+  left_join(always.rare.abundance, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(always.abundance.soil.otus, aes(x = sample.id, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  theme_minimal()
+
+```
+
+for seasonal OTUs
+
+```{r}
+
+
+seasonal.common.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.seasonal$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+                             FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+seasonal.rare.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.seasonal$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+seasonal.abundance.soil.otus <- seasonal.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(seasonal.common.abundance, by = 'sample.id') |>
+  left_join(seasonal.rare.abundance, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(seasonal.abundance.soil.otus, aes(x = sample.id, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  theme_minimal()
+```
+
+
+
+for blips OTUs
+```{r}
+blips.common.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.blips$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+                             FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+blips.rare.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.blips$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+blips.abundance.soil.otus <- blips.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(blips.common.abundance, by = 'sample.id') |>
+  left_join(blips.rare.abundance, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(blips.abundance.soil.otus, aes(x = sample.id, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  theme_minimal()
+```
+
+
+
+%contribution of soil OTUs to community, ALL TOGETHER
+```{r}
+aggregate.soil.otus <- OTU.ts.long |> 
+  filter(OTU %in% RG.D.APS$OTU) |>
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(aggregate.abundance = relative.abundance)
+
+rare.abundance.soil.otus<- OTU.ts.long |> 
+  filter(OTU %in% RG.D.APS$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+common.abundance.soil.otus<- OTU.ts.long |> 
+  filter(OTU %in% RG.D.APS$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(common.abundance = relative.abundance)
+
+abundance.soil.otus <- aggregate.soil.otus |> 
+  left_join(rare.abundance.soil.otus, by = 'sample.id') |> 
+  left_join(common.abundance.soil.otus, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |> 
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+
+ggplot(abundance.soil.otus, aes(x = sample.id, y = abundance, color = abundance.type)) +
+  geom_line(alpha = 0.3)+
+  facet_wrap(~abundance.type)+
+  theme_minimal()
+abundance.soil.otus.wide <- aggregate.soil.otus |> 
+  left_join(rare.abundance.soil.otus, by = 'sample.id') |> 
+  left_join(common.abundance.soil.otus, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0))
+
+abundance.soil.otus.wide |> 
+  mutate(ratio.common.to.rare = abundance.soil.otus.wide$common.abundance/abundance.soil.otus.wide$rare.abundance) |> 
+  ggplot(aes(x = sample.id, y = ratio.common.to.rare)) +
+  geom_line(alpha = 0.3)+
+  theme_minimal()
+
+
+always.abundance.soil.otus.wide <- always.abundance |> 
+  left_join(always.rare.abundance, by = 'sample.id') |> 
+  left_join(always.common.abundance, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0))
+
+a<- always.abundance.soil.otus.wide |> 
+  mutate(ratio.common.to.rare = always.abundance.soil.otus.wide$common.abundance/always.abundance.soil.otus.wide$rare.abundance) |> 
+  ggplot(aes(x = sample.id, y = ratio.common.to.rare)) +
+  geom_line(alpha = 0.3)+
+  theme_minimal()
+```
+
+
+
+%contribution of aquatic OTUs to community, ALL TOGETHER
+```{r}
+aggregate.aquatic.otus <- OTU.ts.long |> 
+  filter(OTU %in% UL.OTUs.APA$OTU) |>
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(aggregate.abundance = relative.abundance)
+
+rare.abundance.aquatic.otus<- OTU.ts.long |> 
+  filter(OTU %in% UL.OTUs.APA$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+common.abundance.aquatic.otus<- OTU.ts.long |> 
+  filter(OTU %in% UL.OTUs.APA$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)|> 
+  rename(common.abundance = relative.abundance)
+
+abundance.aquatic.otus <- aggregate.aquatic.otus |> 
+  left_join(rare.abundance.aquatic.otus, by = 'sample.id') |> 
+  left_join(common.abundance.aquatic.otus, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |> 
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+
+ggplot(abundance.aquatic.otus, aes(x = sample.id, y = abundance, color = abundance.type)) +
+  geom_line(alpha = 0.3)+
+  facet_wrap(~abundance.type)+
+  theme_minimal()
+
+
+(aggregate.aquatic.otus$aggregate.abundance + aggregate.soil.otus$aggregate.abundance)
+
+OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.blips$OTU) |>
+  filter(abundance.type == 1) |> 
+  select(OTU) |> 
+  unique()
+
+
+
 ```
 
