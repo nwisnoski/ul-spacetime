@@ -328,23 +328,25 @@ transect.soil.otu.dna.all <-
            names(transect.soil.otu.dna.7),names(transect.soil.otu.dna.8),names(transect.soil.otu.dna.9),
            names(transect.soil.otu.dna.10),names(transect.soil.otu.dna.11),names(transect.soil.otu.dna.12),
            names(transect.soil.otu.dna.13), names(transect.soil.otu.dna.14),names(transect.soil.otu.dna.15),
-          names(transect.soil.otu.dna.16),names(transect.soil.otu.dna.17),names(transect.soil.otu.dna.18)))
+           names(transect.soil.otu.dna.16),names(transect.soil.otu.dna.17),names(transect.soil.otu.dna.18)))
 #957
 
 for (k in 1:18) {
   a<- paste("transect.soil.otu.dna.", k, sep = "")
-print(length(which(get(a) == 1)))
+  print(length(which(get(a) == 1)))
 }
 
 
-timeseries.otus.long |> filter( OTU %in% transect.soil.otu.dna.all) |>
+timeseries.otus.long |> 
+  filter( OTU %in% transect.soil.otu.dna.all) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
 
 
 
 
-timeseries.otus.rna.present.atl.once<- timeseries.otus.rna.presence[, colSums(timeseries.otus.rna.presence) >0]
+timeseries.otus.rna.present.atl.once<- 
+  timeseries.otus.rna.presence[, colSums(timeseries.otus.rna.presence) >0]
 
 
 transect.soil.otus.dna.present.atl.once.timeseries.rna<-
@@ -558,7 +560,7 @@ Visualizing re-sorted otus
 
 timeseries.otus.long.presence |> 
   filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
-  ggplot(aes(x = sample.id, y= relative.abundance, group= OTU))+
+  ggplot(aes(x = date, y= relative.abundance, group= OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
   scale_y_continuous(limits= c(-0.5,1.5))+
@@ -591,10 +593,11 @@ soil.otus.always.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data = filter(timeseries.otus.long, OTU %in%
                             new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= soil.otus.always.active.abundance, 
-       aes(x= sample.id, y= relative.abundance * 100), 
+       aes(x= date, y= relative.abundance * 100), 
        group= sample.id)+
   geom_line( alpha= 1, color = "#3F2BBD")+
   labs(
@@ -614,10 +617,11 @@ soil.otus.seasonally.active.abundance <-
   aggregate(relative.abundance ~ sample.id, 
             data =filter(timeseries.otus.long, OTU %in% 
                           new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= soil.otus.seasonally.active.abundance, 
-       aes(x= sample.id, y= relative.abundance * 100), 
+       aes(x= date, y= relative.abundance * 100), 
        group= sample.id)+
   geom_line( alpha= 1, color = "#3A8639")+
   labs(
@@ -638,11 +642,12 @@ soil.otus.blips.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data =filter(timeseries.otus.long, OTU %in%
                            new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(
   data= soil.otus.blips.active.abundance, 
-  aes(x= sample.id, y= relative.abundance * 100), group= sample.id)+
+  aes(x= date, y= relative.abundance * 100), group= sample.id)+
   geom_line( alpha= 1, color = "#A42F2F")+
   labs(
     x = "Weeks",
@@ -789,10 +794,11 @@ aquatic.otus.always.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data = filter(timeseries.otus.long, OTU %in% 
                             always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= aquatic.otus.always.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id)+
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -802,9 +808,11 @@ aquatic.otus.seasonally.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data =filter(timeseries.otus.long, OTU %in% 
                            seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
 ggplot(data= aquatic.otus.seasonally.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id)+
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -814,10 +822,11 @@ aquatic.otus.blips.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data =filter(timeseries.otus.long, OTU %in% 
                            blips.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
-           FUN = sum)
+           FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= aquatic.otus.blips.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id)+
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -868,6 +877,7 @@ timeseries.otus.long |>
   facet_wrap(~ OTU)+
   scale_y_continuous(limits = c(-0.5, 1.5))+
   theme_minimal()
+
 ```
 
 
@@ -919,10 +929,11 @@ new.aquatic.otus.always.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data = filter(timeseries.otus.long, OTU %in% 
                             new.always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= new.aquatic.otus.always.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id)+
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -932,10 +943,11 @@ new.aquatic.otus.seasonally.active.abundance<-
   aggregate(relative.abundance ~ sample.id, 
             data =filter(timeseries.otus.long, 
                          OTU %in% new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
-            FUN = sum)
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 ggplot(data= new.aquatic.otus.seasonally.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id)+
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -945,11 +957,12 @@ new.aquatic.otus.blips.active.abundance <-
   aggregate(relative.abundance ~ sample.id, 
   data =filter(timeseries.otus.long, OTU %in%
                  new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU), 
-  FUN = sum)
+  FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 
 ggplot(data = new.aquatic.otus.blips.active.abundance, 
-       aes(x= sample.id, y= relative.abundance), 
+       aes(x= date, y= relative.abundance), 
        group= sample.id) +
   geom_line( alpha= 0.3)+
   theme_minimal()
@@ -1035,9 +1048,10 @@ aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.onc
   
 
 ggplot(aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
-       aes(x = sample.id, y = abundance, color = abundance.type))+
+       aes(x = date, y = abundance, color = abundance.type))+
   geom_line(alpha = 0.3)+
   facet_wrap(~ abundance.type) +
+  scale_x_date(date_breaks = "1 year")+
   theme_minimal()
 
 ```
@@ -1073,9 +1087,10 @@ aggregate.abundance.new.seasonal.classified.transect.soil.otus.dna.present.atl.o
   
 
 ggplot(aggregate.abundance.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
-       aes(x = sample.id, y = abundance, color = abundance.type))+
+       aes(x = date, y = abundance, color = abundance.type))+
   geom_line(alpha = 0.3)+
   facet_wrap(~ abundance.type) +
+  scale_x_date(breaks = "6 months") +
   theme_minimal()
 
 ```
@@ -1147,11 +1162,12 @@ aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <-
   left_join(rare.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
   left_join(common.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
   mutate_all(~replace_na(.,0)) |> 
-  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance') |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
 
 
 ggplot(aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
-       aes(x = sample.id, y = abundance * 100, color = abundance.type)) +
+       aes(x = date, y = abundance * 100, color = abundance.type)) +
   geom_line(alpha = 0.8) +
   facet_wrap(~abundance.type, labeller = labeller( abundance.type = 
                                     c(aggregate.abundance = "All Taxa",
@@ -1521,7 +1537,7 @@ Getting example OTUs to represent different activity patterns
 #Always: selected Otu00001
 timeseries.otus.long.presence |> 
   filter(OTU == "Otu00001") |> 
-  ggplot(aes(x = sample.id, y = relative.abundance)) +
+  ggplot(aes(x = date, y = relative.abundance)) +
   facet_wrap(~OTU) +
   geom_line( alpha = 1, color = "#3F2BBD") +
   scale_y_continuous( limits = c(-0.5, 1.5)) +
@@ -1540,7 +1556,7 @@ ggsave("always_example_otu.pdf", path = "./figures")
 #Seasonal: selected Otu00078
 timeseries.otus.long.presence |> 
   filter(OTU == "Otu00078") |> 
-  ggplot(aes(x = sample.id, y = relative.abundance)) +
+  ggplot(aes(x = date, y = relative.abundance)) +
   facet_wrap(~OTU) +
   geom_line( alpha = 1, color = "#3A8639") +
   scale_y_continuous( limits = c(-0.5, 1.5)) +
@@ -1560,7 +1576,7 @@ ggsave("seasonal_example_otu.pdf", path = "./figures")
 #Blips: selected Otu00042
 timeseries.otus.long.presence |> 
   filter(OTU == "Otu00042") |> 
-  ggplot(aes(x = sample.id, y = relative.abundance)) +
+  ggplot(aes(x = date, y = relative.abundance)) +
   facet_wrap(~OTU,) +
   geom_line( alpha = 1, color = "#A42F2F" ) +
   scale_y_continuous( limits = c(-0.5, 1.5)) +
@@ -1574,6 +1590,15 @@ timeseries.otus.long.presence |>
   )
 
 ggsave("blips_example_otu.pdf", path = "./figures")
+
+
+```
+
+
+
+Looking at rel. abundance of "soil taxa" in soil samples
+```{r}
+
 
 
 ```
