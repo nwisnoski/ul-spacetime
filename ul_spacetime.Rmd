@@ -45,7 +45,7 @@ library(lubridate)
 library(cluster)
 library(dtwclust)
 library(readxl)
-
+library(writexl)
 
 
 source("bin/mothur_tools.R")
@@ -99,18 +99,18 @@ taxon  <- "data/ul_resgrad.trim.contigs.good.unique.good.filter.unique.precluste
 design <- read.delim(design, header=T, row.names=1)
 
 # Import Shared Files
-OTUs <- read.otu(shared = shared, cutoff = "0.03")    # 97% Similarity
+otus <- read.otu(shared = shared, cutoff = "0.03")    # 97% Similarity
 
 # Import Taxonomy
-OTU.tax <- read.tax(taxonomy = taxon, format = "rdp")
+otu.taxonomy <- read.tax(taxonomy = taxon, format = "rdp")
 
-#OTUs <- OTUs[str_which(rownames(OTUs), "RG"),]
-OTUs <- OTUs[-which(rownames(OTUs) == "RGMockComm"),]
+#otus <- otus[str_which(rownames(otus), "RG"),]
+otus <- otus[-which(rownames(otus) == "RGMockComm"),]
 set.seed(12742899)
 
-OTUs <- rrarefy(OTUs, min(rowSums(OTUs)))
-print(length(which(OTUs == 0)))  #23630524
-OTUs.REL <- decostand(OTUs, "total")
+otus <- rrarefy(otus, min(rowSums(otus)))
+print(length(which(otus == 0)))  #23630524
+otus.relative.abundance <- decostand(otus, "total")
 ```
 
 
@@ -118,112 +118,65 @@ OTUs.REL <- decostand(OTUs, "total")
 
 ```{r time_series, fig.asp=1}
 # Subset to just the time series sites
-UL.ts.OTUs <- OTUs[str_which(rownames(OTUs), "UL"),]
+timeseries.otus <- otus[str_which(rownames(otus), "UL"),]
 
 # make sure OTU table matches up with design order
-UL.ts.design <- read_csv("data/UL_timeseries_design.csv")
-UL.ts.OTUs <- UL.ts.OTUs[match(UL.ts.design$sample.name, rownames(UL.ts.OTUs)),]
+timeseries.design <- read_csv("data/UL_timeseries_design.csv")
+timeseries.otus <- timeseries.otus[match(timeseries.design$sample.name, 
+                                         rownames(timeseries.otus)),]
 
 # separate RNA and DNA dynamics
-UL.ts.OTUs.RNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "RNA"),], method = "total")
-UL.ts.OTUs.DNA <- decostand(UL.ts.OTUs[which(UL.ts.design$sample.type == "DNA"),], method = "total")
+timeseries.otus.rna <- decostand(timeseries.otus[which(timeseries.design$sample.type == "RNA"),], 
+                                 method = "total")
+timeseries.otus.dna <- decostand(timeseries.otus[which(timeseries.design$sample.type == "DNA"),], 
+                                 method = "total")
+timeseries.otus.dna.presence <- decostand(timeseries.otus.dna + timeseries.otus.rna, 
+                                          "pa")
+timeseries.otus.rna.presence <- decostand(timeseries.otus.rna, 
+                                          "pa")
 
-UL.ts.OTUs.DNA.PA <- decostand(UL.ts.OTUs.DNA + UL.ts.OTUs.RNA, "pa")
-UL.ts.OTUs.RNA.PA <- decostand(UL.ts.OTUs.RNA, "pa")
 
-env.ts.data <- read.table("data/ul-seedbank.env.txt", sep="\t", header=TRUE)
-env.ts.data$date <- as.Date(parse_date_time(env.ts.data$date, "m d y"))
-env.ts.data$doc[which(env.ts.data$doc == "**")] <- NA
-env.ts.data$doc <- as.numeric(env.ts.data$doc)
-summary(env.ts.data)
-UL.ts.design <- left_join(UL.ts.design, env.ts.data[,c("sample.id", "date")])
-env.ts.data <- env.ts.data[-which(!(env.ts.data$date %in% UL.ts.design$date)),]
+timeseries.environment.data <- read.table("data/ul-seedbank.env.txt", sep="\t", header=TRUE)
+timeseries.environment.data$date <- as.Date(parse_date_time(timeseries.environment.data$date, "m d y"))
+timeseries.environment.data$doc[which(timeseries.environment.data$doc == "**")] <- NA
+timeseries.environment.data$doc <- as.numeric(timeseries.environment.data$doc)
+summary(timeseries.environment.data)
+timeseries.design <- left_join(timeseries.design, timeseries.environment.data[,c("sample.id", "date")])
+timeseries.environment.data <- timeseries.environment.data[-which(!(timeseries.environment.data$date %in% 
+                                                                      timeseries.design$date)),]
 ```
 
 
 ```{r}
-RGSoil.OTUs <- OTUs[str_which(rownames(OTUs), "RGSoil"),] 
-in.soils <- RGSoil.OTUs[,which(colSums(RGSoil.OTUs) > 0)]
+soil.otus <- otus[str_which(rownames(otus), "RGSoil"),] 
+in.soils <- soil.otus[,which(colSums(soil.otus) > 0)]
 
 soil.taxa <- colnames(in.soils)
-nonsoil.taxa <- colnames(RGSoil.OTUs[,which(colSums(RGSoil.OTUs) == 0)])
+nonsoil.taxa <- colnames(soil.otus[,which(colSums(soil.otus) == 0)])
 
-length(soil.taxa) + length(nonsoil.taxa) == ncol(OTUs)
+length(soil.taxa) + length(nonsoil.taxa) == ncol(otus)
 
 
-max.abund.in.soils <- apply(decostand(RGSoil.OTUs, "total"), MARGIN = 2, max)
-common.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils >= 0.001)])
-rare.in.soils <- names(max.abund.in.soils[which(max.abund.in.soils < 0.001)])
-length(common.in.soils) + length(rare.in.soils) == ncol(OTUs)
+max.abundance.in.soils <- apply(decostand(soil.otus, "total"), MARGIN = 2, max)
+common.in.soils <- names(max.abundance.in.soils[which(max.abundance.in.soils >= 0.001)])
+rare.in.soils <- names(max.abundance.in.soils[which(max.abundance.in.soils < 0.001)])
+length(common.in.soils) + length(rare.in.soils) == ncol(otus)
 
-# pull out time series of taxa in soils
-UL.ts.toplot.RNA <- UL.ts.OTUs.RNA[,which(colMeans(UL.ts.OTUs.DNA.PA) > .2)] # present in half samples
-
-OTUs.toplot.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% soil.taxa)]
-
-# pull out taxa not detected in soils
-OTUs.toplot.not.in.soil <- UL.ts.OTUs.RNA[, which(colnames(UL.ts.toplot.RNA) %in% nonsoil.taxa)]
-
-ncol(OTUs.toplot.in.soil) + ncol(OTUs.toplot.not.in.soil) == ncol(UL.ts.toplot.RNA)
-
-otu_trends_to_plot <- cbind.data.frame(UL.ts.design[which(UL.ts.design$sample.type == "RNA"),], OTUs.toplot.in.soil) %>% as_tibble() %>% 
-  gather(-sample.name, -sample.type, -sample.id, -date, key = OTU, value = rel_abund) %>% 
-  mutate(soils = ifelse(OTU %in% nonsoil.taxa, "Absent from soils",
-                   ifelse(OTU %in% common.in.soils, "Common in soils", "Rare in soils")))
-otu_trends_to_plot %>% 
-  ggplot(aes(x = date, y = rel_abund + 1e-4, group = OTU)) +
-  geom_point(alpha = .1) + 
-  geom_line(color = "blue",
-            alpha = 0.5) +
-  geom_vline(aes(xintercept = as_date("2013-07-15"))) +
-  scale_y_log10() + 
-  scale_x_date(labels = scales::date_format(format = "%b %y")) +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  facet_wrap(~soils, ncol = 1) +
-  labs(x = "",
-       y = "Relative abundance")
-  
 
 ```
 
-
-
-
-
-
-
-Classifying Middle OTUs in RG samples, the classification will help focus on a smaller
-section of the OTUs closer to the Time series collection to get a better
-activity representation instead of far way points which might be too different.
-
-```{r}
-
-RG.middle.OTU <-OTUs.REL[c("RGD08", "RGD09", "RGD10", "RGD11", "RGc08", "RGc09", "RGc10", "RGc11"),]
-
-
-#OTUs always active
-RG.middle.RNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGc"), ])))
-RG.middle.Ac <- RG.middle.RNA[, which(RG.middle.RNA[1, ] > 0)]
-RG.avg.ac<- colnames(RG.middle.Ac)
-RG.avg.soil.ac <- RG.middle.Ac[, which(colnames(RG.middle.Ac) %in% soil.taxa)]
-
-#OTUs never active
-RG.middle.DNA <- as.data.frame(t(colMeans(RG.middle.OTU[str_which(rownames(RG.middle.OTU), "RGD"),])))
-
- 
-```
 
 
 
 changing wide form to long form, for code and plot efficiency
 ```{r}
-OTU.ts.long<- UL.ts.OTUs.RNA |> as_tibble() |> 
+timeseries.otus.long<- timeseries.otus.rna |> as_tibble() |> 
   rownames_to_column( var= "sample.id" ) |> 
   mutate(sample.id= as.integer(sample.id)) |> 
   pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
-  left_join(env.ts.data, by= "sample.id" )
+  left_join(timeseries.environment.data, by= "sample.id" )
 
-OTU.ts.long |> filter(OTU %in% RG.avg.ac) |> 
+timeseries.otus.long |> filter(OTU %in% names.transect.middle.active.otus) |> 
   filter( OTU %in% soil.taxa) |> 
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
   geom_line(alpha = 0.3)+
@@ -231,42 +184,43 @@ OTU.ts.long |> filter(OTU %in% RG.avg.ac) |>
 
 ```
 
-Plotting soil OTUs detected in transect from soil DNA and RNA
+Plotting soil otus detected in transect from soil DNA and RNA
 ```{r}
 
 #filtering transact data fractionally
-RG.OTUs <- OTUs[str_which(rownames(OTUs), "RG"),] 
-print(length(which(RG.OTUs == 0))) #3234533 
+transect.otus <- otus[str_which(rownames(otus), "RG"),] 
+print(length(which(transect.otus == 0))) #3234533 
 
 # separate RNA and DNA dynamics
-RG.OTUs.RNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGc"),] 
-print(length(which(RG.OTUs.RNA == 0))) #1498062 
+transect.otus.rna <- transect.otus[str_which(rownames(transect.otus), "RGc"),] 
+print(length(which(transect.otus.rna == 0))) #1498062 
 
-RG.OTUs.DNA <- RG.OTUs[str_which(rownames(RG.OTUs), "RGD"),] 
-print(length(which(RG.OTUs.DNA == 0))) #1491145 
+transect.otus.dna <- transect.otus[str_which(rownames(transect.otus), "RGD"),] 
+print(length(which(transect.otus.dna == 0))) #1491145 
  
 
-RG.OTUs.DNA.PA <- decostand(RG.OTUs.DNA + RG.OTUs.RNA, "pa") 
-print(length(which(RG.OTUs.DNA.PA == 1))) #10082
-print(length(which(RG.OTUs.DNA.PA == 0))) #1490092
+transect.otus.dna.presence <- decostand(transect.otus.dna + transect.otus.rna, "pa") 
+print(length(which(transect.otus.dna.presence == 1))) #10082
+print(length(which(transect.otus.dna.presence == 0))) #1490092
 
-RG.OTUs.RNA.PA <- decostand(RG.OTUs.RNA, "pa") 
-print(length(which(RG.OTUs.RNA.PA == 1))) #2112 
-print(length(which(RG.OTUs.RNA.PA == 0))) #1498062
+transect.otus.rna.presence <- decostand(transect.otus.rna, "pa") 
+print(length(which(transect.otus.rna.presence == 1))) #2112 
+print(length(which(transect.otus.rna.presence == 0))) #1498062
 
-RG.OTUs.DNA2.PA <- decostand(RG.OTUs.DNA, "pa") 
-print(length(which(RG.OTUs.DNA2.PA == 1))) #9029 
-print(length(which(RG.OTUs.DNA2.PA == 0))) #1491145
+transect.otus.dna2.presence <- decostand(transect.otus.dna, "pa") 
+print(length(which(transect.otus.dna2.presence == 1))) #9029 
+print(length(which(transect.otus.dna2.presence == 0))) #1491145
 
-RG.1<- RG.OTUs.RNA.PA[1, RG.OTUs.RNA.PA[1,]==1, drop= FALSE]
+#transect.soil.1<- transect.otus.rna.presence[1, transect.otus.rna.presence[1,]==1, drop= FALSE]
+#sample code to use in the loop
 
 
 for (k in 1:18) {
   
   # Create a dynamic variable name
-  a <- paste("RG.", k, sep = "")
+  a <- paste("transect.soil.otu.rna.", k, sep = "")
   
-  b<- RG.OTUs.RNA.PA[k, RG.OTUs.RNA.PA[k, ] == 1, drop = FALSE]
+  b<- transect.otus.rna.presence[k, transect.otus.rna.presence[k, ] == 1, drop = FALSE]
   
   # Subset the data based on the dynamic variable name
   assign(a, b[, colnames(b) %in% soil.taxa])
@@ -274,18 +228,24 @@ for (k in 1:18) {
 }
 
 
-RG.all <- unique(c(names(RG.1),names(RG.2),names(RG.3),names(RG.4),names(RG.5),names(RG.6),names(RG.7),
-  names(RG.8),names(RG.9),names(RG.10),names(RG.11),names(RG.12),names(RG.13),names(RG.14),names(RG.15),
-            names(RG.16),names(RG.17),names(RG.18)))
+transect.soil.otu.rna.all <- 
+  unique(c(names(transect.soil.otu.rna.1),names(transect.soil.otu.rna.2),names(transect.soil.otu.rna.3),
+           names(transect.soil.otu.rna.4),names(transect.soil.otu.rna.5),names(transect.soil.otu.rna.6),
+           names(transect.soil.otu.rna.7),names(transect.soil.otu.rna.8),names(transect.soil.otu.rna.9),
+           names(transect.soil.otu.rna.10),names(transect.soil.otu.rna.11),names(transect.soil.otu.rna.12),
+           names(transect.soil.otu.rna.13),names(transect.soil.otu.rna.14),names(transect.soil.otu.rna.15),
+           names(transect.soil.otu.rna.16),names(transect.soil.otu.rna.17),names(transect.soil.otu.rna.18)))
+
+
 #220
 for (k in 1:18) {
-  a<- paste("RG.", k, sep = "")
+  a<- paste("transect.soil.otu.rna.", k, sep = "")
 print(length(which(get(a) == 1)))
 }
 
 
 
-OTU.ts.long |> filter( OTU %in% RG.all) |>
+timeseries.otus.long |> filter( OTU %in% transect.soil.otu.rna.all) |>
   ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
   geom_line(alpha = 0.3)
 
@@ -294,121 +254,51 @@ OTU.ts.long |> filter( OTU %in% RG.all) |>
 for (k in 1:18) {
   
   # Create a dynamic variable name
-  a <- paste("RG.D", k, sep = "")
+  a <- paste("transect.soil.otu.dna.", k, sep = "")
   
-  b<- RG.OTUs.DNA.PA[k, RG.OTUs.DNA.PA[k, ] == 1, drop = FALSE]
+  b<- transect.otus.dna.presence[k, transect.otus.dna.presence[k, ] == 1, drop = FALSE]
   
   # Subset the data based on the dynamic variable name
   assign(a, b[, colnames(b) %in% soil.taxa])
   
 }
 
-RG.D.all <- unique(c(names(RG.D1),names(RG.D2),names(RG.D3),names(RG.D4),names(RG.D5),
-                      names(RG.D6),
-                     names(RG.D7),names(RG.D8),names(RG.D9),names(RG.D10),names(RG.D11),
-                     names(RG.D12),names(RG.D13), names(RG.D14),names(RG.D15),
-            names(RG.D16),names(RG.D17),names(RG.D18)))
+transect.soil.otu.dna.all <- 
+  unique(c(names(transect.soil.otu.dna.1),names(transect.soil.otu.dna.2),names(transect.soil.otu.dna.3),
+           names(transect.soil.otu.dna.4),names(transect.soil.otu.dna.5),names(transect.soil.otu.dna.6),
+           names(transect.soil.otu.dna.7),names(transect.soil.otu.dna.8),names(transect.soil.otu.dna.9),
+           names(transect.soil.otu.dna.10),names(transect.soil.otu.dna.11),names(transect.soil.otu.dna.12),
+           names(transect.soil.otu.dna.13), names(transect.soil.otu.dna.14),names(transect.soil.otu.dna.15),
+           names(transect.soil.otu.dna.16),names(transect.soil.otu.dna.17),names(transect.soil.otu.dna.18)))
 #957
 
 for (k in 1:18) {
-  a<- paste("RG.D", k, sep = "")
-print(length(which(get(a) == 1)))
+  a<- paste("transect.soil.otu.dna.", k, sep = "")
+  print(length(which(get(a) == 1)))
 }
 
 
-OTU.ts.long |> filter( OTU %in% RG.D.all) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)
+
+timeseries.otus.rna.present.atl.once<- 
+  timeseries.otus.rna.presence[, colSums(timeseries.otus.rna.presence) >0]
 
 
-
-
-UL.OTUs.RNA.AP<- UL.ts.OTUs.RNA.PA[, colSums(UL.ts.OTUs.RNA.PA) >0]
-
-
-UL.OTUs.RNA.APS<- UL.OTUs.RNA.AP[,colnames(UL.OTUs.RNA.AP) %in% RG.D.all]
+transect.soil.otus.dna.present.atl.once.timeseries.rna<-
+  timeseries.otus.rna.present.atl.once[,colnames(timeseries.otus.rna.present.atl.once)
+                                       %in% transect.soil.otu.dna.all]
 #536
 
-
-OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS)) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()
-
-
-
-OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS[,31:60])) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  facet_wrap(~ OTU, scales = "free_y")
-
-
-```
-Studying Sorted Soil Soil OTUs in Time series
-
-Loading objects
-```{r}
-ul.dna.soilotus.always <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.always")
-
-ul.dna.soilotus.blips <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.blips")
-
-ul.dna.soilotus.fh <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.fh")
-
-ul.dna.soilotus.s1 <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.s1")
-
-ul.dna.soilotus.s2 <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.s2")
-
-ul.dna.soilotus.s3 <- read_excel("soil_otu_activity_pattern/sortedotus.xlsx", sheet = "ul.dna.soilotus.s3")
-
 ```
 
 
-
-Looking at Dynamics
+Trying to plot the presence data in long form
 ```{r}
-OTU.ts.long |> filter( OTU %in% ul.dna.soilotus.always$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()
-
-OTU.ts.long |> filter( OTU %in% ul.dna.soilotus.blips$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()
-
-OTU.ts.long |> filter( OTU %in% (ul.dna.soilotus.always[1:50,])$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  facet_wrap(~ OTU, scales = "free_y")
-
-```
-
-
-
-Trying to plot the PA data in long form
-```{r}
-OTU.ts.long.pa<- UL.ts.OTUs.RNA.PA |> as_tibble() |> 
+timeseries.otus.long.presence<- 
+  timeseries.otus.rna.presence |> as_tibble() |> 
   rownames_to_column( var= "sample.id" ) |> 
   mutate(sample.id= as.integer(sample.id)) |> 
   pivot_longer(names_to = "OTU", values_to = "relative.abundance", cols = -sample.id) |> 
-  left_join(env.ts.data, by= "sample.id" )
-
-OTU.ts.long.pa |> filter( OTU %in% ul.dna.soilotus.always$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  #scale_y_log10()+
-  facet_wrap(~OTU)
-
-OTU.ts.long.pa |> filter( OTU %in% ul.dna.soilotus.fh$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()+
-  facet_wrap(~OTU)
-
-OTU.ts.long.pa |> filter( OTU %in% (ul.dna.soilotus.blips[1:50,])$OTU) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  facet_wrap(~ OTU, scales = "free_y")
+  left_join(timeseries.environment.data, by= "sample.id" )
 
 
 ```
@@ -418,59 +308,1035 @@ OTU.ts.long.pa |> filter( OTU %in% (ul.dna.soilotus.blips[1:50,])$OTU) |>
 Sorting from RNA transect data and their activity in the time series
 ```{r}
 
-UL.OTUs.RNA.APS.R<- as.data.frame(UL.OTUs.RNA.AP[,colnames(UL.OTUs.RNA.AP) %in% RG.all])
-
-OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS.R)) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  scale_y_log10()
-
-OTU.ts.long |> filter( OTU %in% colnames(UL.OTUs.RNA.APS.R[,1:30])) |>
-  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU ))+
-  geom_line(alpha = 0.3)+
-  facet_wrap(~ OTU, scales = "free_y")
+transect.soil.otus.rna.present.atl.once.timeseries.rna<- 
+  as.data.frame(timeseries.otus.rna.present.atl.once[,colnames(timeseries.otus.rna.present.atl.once)
+                                                     %in% transect.soil.otu.rna.all])
 
 ```
 
 
 Attempting to Classify activity patterns based on metrics.
 ```{r}
-RG.D.APS<- tibble( OTU= colnames(UL.OTUs.RNA.APS))
+names.transect.soil.otus.dna.present.atl.once.timeseries.rna<- 
+  tibble( OTU= colnames(transect.soil.otus.dna.present.atl.once.timeseries.rna))
 
-sorted.otu.clfd<- RG.D.APS |> 
-  mutate(active = if_else(colSums(UL.OTUs.RNA.APS)/124 > 0.9, "always", 
-                          if_else(colSums(UL.OTUs.RNA.APS)/124 < 0.1, "blips", "seasonal")))
-sorted.otu.clfd |> count(active)
+classified.transect.soil.otus.dna.present.atl.once.timeseries.rna<- 
+  names.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
+  mutate(active = if_else(colSums(transect.soil.otus.dna.present.atl.once.timeseries.rna)/124 > 0.9, "always",
+                          if_else(colSums(transect.soil.otus.dna.present.atl.once.timeseries.rna)/124 < 0.1, 
+                                  "blips", "seasonal")))
 
-sorted.otu.always<- sorted.otu.clfd |> 
+classified.transect.soil.otus.dna.present.atl.once.timeseries.rna |> count(active)
+
+always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna<- 
+  classified.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
   filter(active== "always")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.always$OTU) |>
+timeseries.otus.long.presence |> 
+  filter(OTU %in% always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
   scale_y_continuous( limits = c(-0.5,1.5))+
   theme_minimal()
 
-sorted.otu.seasonal<- sorted.otu.clfd |> 
+seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna<- 
+  classified.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
   filter(active== "seasonal")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.seasonal$OTU) |>
+timeseries.otus.long.presence |> 
+  filter(OTU %in% seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna[1:35,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
   scale_y_continuous( limits = c(-0.5,1.5))+
   theme_minimal()
 
-sorted.otu.blips<- sorted.otu.clfd |> 
+blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna<- 
+  classified.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
   filter(active== "blips")
 
-OTU.ts.long.pa |> filter(OTU %in% sorted.otu.blips$OTU) |>
+timeseries.otus.long.presence |> 
+  filter(OTU %in% blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna[1:35,]$OTU) |>
   ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
   geom_line(alpha = 0.3)+
   facet_wrap(~OTU)+
   scale_y_continuous( limits = c(-0.5,1.5))+
   theme_minimal()
+
+```
+
+
+
+
+Manually reassigned metric classified OTU to correct for patterns based on sustained activity
+```{r}
+new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "always")
+new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "seasonal")
+new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  read_excel("soil_otu_activity_pattern/new.sortedotus.xlsx", sheet = "blips")
+new.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <-
+  bind_rows(new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna,
+            new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna) |>
+  bind_rows(new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna)
+
+```
+
+
+
+Visualizing re-sorted otus
+```{r}
+
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  ggplot(aes(x = date, y= relative.abundance, group= OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limits= c(-0.5,1.5))+
+  theme_minimal()
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limit = c(-0.5, 1.5))+
+  theme_minimal()
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna[31:60,]$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous(limit = c(-0.5, 1.5))+
+  theme_minimal()
+```
+
+
+Attempting to visualize the %contribution of the sorted otus to the dynamic active community
+i.e if they were rare or common and what % of the active abundance did they make up
+Only inspecting the RNA pool of the time series
+```{r}
+#ALways
+soil.otus.always.active.abundance<- 
+  aggregate(relative.abundance ~ sample.id, 
+            data = filter(timeseries.otus.long, OTU %in%
+                            new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+ggplot(data= soil.otus.always.active.abundance, 
+       aes(x= date, y= relative.abundance * 100), 
+       group= sample.id)+
+  geom_line( alpha= 1, color = "#3F2BBD")+
+  labs(
+    x = "Weeks",
+    y = "Percent Abundance"
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text = element_text( size = 12)
+  ) +
+  scale_y_continuous( limits = c(0, 65))
+
+ggsave(filename = "always_soil_taxa_percent_contriution.pdf", path = "./figures")
+
+#Seasonal                                
+soil.otus.seasonally.active.abundance <- 
+  aggregate(relative.abundance ~ sample.id, 
+            data =filter(timeseries.otus.long, OTU %in% 
+                          new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+ggplot(data= soil.otus.seasonally.active.abundance, 
+       aes(x= date, y= relative.abundance * 100), 
+       group= sample.id)+
+  geom_line( alpha= 1, color = "#3A8639")+
+  labs(
+    x = "Weeks",
+    y = "Percent Abundance"
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text = element_text( size = 12)
+  ) +
+  scale_y_continuous( limits = c(0, 65))
+
+ggsave(filename = "seasonal_soil_taxa_percent_contriution.pdf", path = "./figures")
+
+
+#Blips
+soil.otus.blips.active.abundance<- 
+  aggregate(relative.abundance ~ sample.id, 
+            data =filter(timeseries.otus.long, OTU %in%
+                           new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU),
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+ggplot(
+  data= soil.otus.blips.active.abundance, 
+  aes(x= date, y= relative.abundance * 100), group= sample.id)+
+  geom_line( alpha= 1, color = "#A42F2F")+
+  labs(
+    x = "Weeks",
+    y = "Percent Abundance"
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text = element_text( size = 12)
+  ) +
+  scale_y_continuous( limits = c(0, 65))
+
+ggsave(filename = "blips_soil_taxa_percent_contriution.pdf", path = "./figures")
+
+#view(filter(otu.taxonomy, OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU))
+#view(filter(otu.taxonomy, OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU))
+#view(filter(otu.taxonomy, OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU))
+
+```
+
+
+
+Trying to figure out if these sorted otus are rare or common in aquatic community
+```{r}
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>   
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna[91:120,]$OTU) |>
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+```
+
+
+
+
+Attempting to sort aquatic otus in the time series, i.e. otus not detected in soil samples
+```{r}
+
+timeseries.aquatic.otus.rna.present.atl.once<- 
+  timeseries.otus.rna.present.atl.once[,!(colnames(timeseries.otus.rna.present.atl.once) %in% 
+                                            transect.soil.otu.dna.all)]
+
+names.timeseries.aquatic.otus.rna.present.atl.once<- 
+  tibble( OTU= colnames(timeseries.aquatic.otus.rna.present.atl.once))
+
+classified.timeseries.aquatic.otus.rna.present.atl.once<- 
+  names.timeseries.aquatic.otus.rna.present.atl.once |> 
+  mutate(active = if_else(colSums(timeseries.aquatic.otus.rna.present.atl.once)/124 > 0.9, "always", 
+                          if_else(colSums(timeseries.aquatic.otus.rna.present.atl.once)/124 < 0.1, "blips",
+                                  "seasonal")))
+
+classified.timeseries.aquatic.otus.rna.present.atl.once |> count(active)
+
+write_xlsx(classified.timeseries.aquatic.otus.rna.present.atl.once, 
+           "classified.timeseries.aquatic.otus.rna.present.atl.once.xlsx")
+
+
+always.classified.timeseries.aquatic.otus.rna.present.atl.once<- 
+  classified.timeseries.aquatic.otus.rna.present.atl.once |> 
+  filter(active== "always")
+
+write_xlsx(always.classified.timeseries.aquatic.otus.rna.present.atl.once,
+           "always.classified.timeseries.aquatic.otus.rna.present.atl.once.xlsx")
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once<- 
+  classified.timeseries.aquatic.otus.rna.present.atl.once |> 
+  filter(active== "seasonal")
+
+write_xlsx(seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once, 
+           "seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once.xlsx")
+
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once[661:690,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+blips.classified.timeseries.aquatic.otus.rna.present.atl.once<- 
+  classified.timeseries.aquatic.otus.rna.present.atl.once |> 
+  filter(active== "blips")
+
+write_xlsx(blips.classified.timeseries.aquatic.otus.rna.present.atl.once, 
+           "blips.classified.timeseries.aquatic.otus.rna.present.atl.once.xlsx")
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% blips.classified.timeseries.aquatic.otus.rna.present.atl.once[101:200,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+```
+
+
+
+loading re-sorted aquatic otus
+```{r}
+new.always.classified.timeseries.aquatic.otus.rna.present.atl.once <-
+  read_csv("aquatic_otu_activity_pattern/new.always.classified.timeseries.aquatic.otus.rna.present.atl.once.csv")
+new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once <- 
+  read_csv("aquatic_otu_activity_pattern/new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once.csv")
+new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once <- 
+  read_csv("aquatic_otu_activity_pattern/new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once.csv")
+```
+
+
+
+plotting re-sorted aquatic otus
+```{r}
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once[1:30,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+
+timeseries.otus.long.presence |> 
+  filter(OTU %in% new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once[1:30,]$OTU) |>
+  ggplot(aes(x= sample.id, y= relative.abundance,group = OTU))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~OTU)+
+  scale_y_continuous( limits = c(-0.5,1.5))+
+  theme_minimal()
+```
+
+
+
+new aquatic %contributions
+```{r}
+new.aquatic.otus.always.active.abundance<- 
+  aggregate(relative.abundance ~ sample.id, 
+            data = filter(timeseries.otus.long, OTU %in% 
+                            new.always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+ggplot(data= new.aquatic.otus.always.active.abundance, 
+       aes(x= date, y= relative.abundance), 
+       group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+new.aquatic.otus.seasonally.active.abundance<- 
+  aggregate(relative.abundance ~ sample.id, 
+            data =filter(timeseries.otus.long, 
+                         OTU %in% new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU),
+            FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+ggplot(data= new.aquatic.otus.seasonally.active.abundance, 
+       aes(x= date, y= relative.abundance), 
+       group= sample.id)+
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+
+new.aquatic.otus.blips.active.abundance <- 
+  aggregate(relative.abundance ~ sample.id, 
+  data =filter(timeseries.otus.long, OTU %in%
+                 new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU), 
+  FUN = sum) |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+
+ggplot(data = new.aquatic.otus.blips.active.abundance, 
+       aes(x= date, y= relative.abundance), 
+       group= sample.id) +
+  geom_line( alpha= 0.3)+
+  theme_minimal()
+
+```
+
+
+new aquatic rare or common
+```{r}
+timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU) |> 
+  ggplot(aes(x= sample.id, y= relative.abundance, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  theme_minimal()
+
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.timeseries.aquatic.otus.rna.present.atl.once$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once[20:50,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.blips.classified.timeseries.aquatic.otus.rna.present.atl.once[450:500,]$OTU) |> 
+  mutate(type= if_else(relative.abundance >= 0.001, 1, 0)) |> 
+  ggplot(aes(x= sample.id, y= type, group= OTU))+
+  geom_line( alpha =0.3)+
+  facet_wrap(~ OTU)+
+  scale_y_continuous(limits = c(-0.5, 1.5))+
+  theme_minimal()
+```
+
+
+
+
+what in %contribution is coming from rare or common otus
+
+for always OTU
+```{r}
+
+timeseries.otus.long<- 
+  timeseries.otus.long |> 
+  mutate(abundance.type= if_else(relative.abundance >= 0.001, 1, 0))
+
+commonly.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+rarely.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  soil.otus.always.active.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(commonly.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |>
+  left_join(rarely.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+       aes(x = date, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  scale_x_date(date_breaks = "1 year")+
+  theme_minimal()
+
+```
+
+for seasonal otus
+
+```{r}
+
+
+commonly.abundant.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+rarely.abundant.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+aggregate.abundance.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  soil.otus.seasonally.active.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(commonly.abundant.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |>
+  left_join(rarely.abundant.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(aggregate.abundance.new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+       aes(x = date, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  scale_x_date(breaks = "6 months") +
+  theme_minimal()
+
+```
+
+
+
+for blips otus
+```{r}
+commonly.abundant.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum) |> 
+  rename(common.abundance = relative.abundance)
+
+rarely.abundant.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+aggregate.abundance.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  soil.otus.blips.active.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  left_join(commonly.abundant.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |>
+  left_join(rarely.abundant.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |>
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+  
+
+ggplot(aggregate.abundance.new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+       aes(x = sample.id, y = abundance, color = abundance.type))+
+  geom_line(alpha = 0.3)+
+  facet_wrap(~ abundance.type) +
+  theme_minimal()
+
+
+```
+
+
+*Start here
+%contribution of soil otus to community, ALL TOGETHER
+```{r}
+total.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(aggregate.abundance = relative.abundance)
+
+rare.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+common.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(common.abundance = relative.abundance)
+
+aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
+  total.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
+  left_join(rare.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
+  left_join(common.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |> 
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance') |> 
+  merge(timeseries.environment.data[, c("sample.id", "date")], by = 'sample.id')
+
+
+ggplot(aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+       aes(x = date, y = abundance * 100, color = abundance.type)) +
+  geom_line(alpha = 0.8) +
+  facet_wrap(~abundance.type, labeller = labeller( abundance.type = 
+                                    c(aggregate.abundance = "All Taxa",
+                                      common.abundance = "Common Taxa", 
+                                      rare.abundance = "Rare Taxa"))) +
+  guides(color = "none") +
+  labs(
+    x = "Weeks", 
+    y = " Percent Abundance \nfrom Active Soil Taxa" ) +
+  theme(
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 10)) + 
+  scale_color_manual( values = c( "aggregate.abundance" = "#460E5F", #purple
+                                  "common.abundance" = "#B16415", #orange
+                                  "rare.abundance" = "#237B75" #teal
+                                  ))
+  
+
+ggsave(filename = "percent_contribution_of_active_soil_taxa_in_aquatic_community.jpeg", 
+       path = "./figures")
+  
+
+
+aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide <- 
+  total.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna |> 
+  left_join(rare.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
+  left_join(common.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0))
+
+aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide |> 
+  mutate(ratio.common.to.rare = 
+           aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide$common.abundance / 
+           aggregate.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide$rare.abundance) |> 
+  ggplot(aes(x = sample.id, y = ratio.common.to.rare)) +
+  geom_line(alpha = 0.3)+
+  theme_minimal()
+
+
+aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide <- 
+  soil.otus.always.active.abundance |> 
+  left_join(rarely.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |> 
+  left_join(commonly.abundant.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, 
+            by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0))
+
+#Ratio of common to rare aggregate abundance
+aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide |> 
+  mutate(ratio.common.to.rare = 
+           aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide$common.abundance / 
+           aggregate.abundance.new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna.wide$rare.abundance) |> 
+  ggplot(aes(x = sample.id, y = ratio.common.to.rare)) +
+  geom_line(alpha = 0.3)+
+  theme_minimal()
+
+```
+
+
+
+%contribution of aquatic otus to community, ALL TOGETHER
+```{r}
+total.abundance.timeseries.aquatic.otus.rna.present.atl.once <- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.timeseries.aquatic.otus.rna.present.atl.once$OTU) |>
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(aggregate.abundance = relative.abundance)
+
+rare.abundance.timeseries.aquatic.otus.rna.present.atl.once<- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.timeseries.aquatic.otus.rna.present.atl.once$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(rare.abundance = relative.abundance)
+
+common.abundance.timeseries.aquatic.otus.rna.present.atl.once<- 
+  timeseries.otus.long |> 
+  filter(OTU %in% names.timeseries.aquatic.otus.rna.present.atl.once$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, FUN = sum)|> 
+  rename(common.abundance = relative.abundance)
+
+aggregate.abundance.timeseries.aquatic.otus.rna.present.atl.once <- 
+  total.abundance.timeseries.aquatic.otus.rna.present.atl.once |> 
+  left_join(rare.abundance.timeseries.aquatic.otus.rna.present.atl.once, by = 'sample.id') |> 
+  left_join(common.abundance.timeseries.aquatic.otus.rna.present.atl.once, by = 'sample.id') |> 
+  mutate_all(~replace_na(.,0)) |> 
+  pivot_longer(cols = contains('abundance'), names_to = 'abundance.type', values_to = 'abundance')
+
+ggplot(aggregate.abundance.timeseries.aquatic.otus.rna.present.atl.once, 
+       aes(x = sample.id, y = abundance, color = abundance.type)) +
+  geom_line(alpha = 0.3)+
+  facet_wrap(~abundance.type)+
+  theme_minimal()
+
+
+(total.abundance.timeseries.aquatic.otus.rna.present.atl.once$aggregate.abundance + 
+    total.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna$aggregate.abundance)
+
+timeseries.otus.long |> 
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(abundance.type == 1) |> 
+  select(OTU) |> 
+  unique()
+
+
+
+```
+
+
+
+
+
+Checking what % of active soil OTUs are common vs rare dynamically
+
+```{r}
+#All soil OTUs that were active atleast once (fixed number of OTUs in each sample.id)
+percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna <-
+  timeseries.otus.long |> 
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU)|>
+  group_by(sample.id) |> 
+  summarise(
+    total.active = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.active)*100,
+    percent.rare = (total.rare / total.active)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+
+ggplot(percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna,
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal()
+  
+#percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.common +
+#  percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.rare == 536
+
+#Active classified soil OTUs
+percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna <-
+  timeseries.otus.long |> 
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU)|>
+  group_by(sample.id) |> 
+  summarise(
+    total.active = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.active)*100,
+    percent.rare = (total.rare / total.active)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+
+ggplot(percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna,
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal()
+
+#Soil OTUs only when present (dynamic number of OTUs in each sample.id)
+when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna <-
+  timeseries.otus.long |> 
+  mutate(presence = timeseries.otus.long.presence$relative.abundance)|>
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(presence == 1) |> 
+  group_by(sample.id) |> 
+  summarise(
+    total.present = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.present)*100,
+    percent.rare = (total.rare / total.present)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+#when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.common +
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.rare == 
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.present
+
+ggplot(when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna,
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal()  
+
+#Always classified
+when.present.percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  timeseries.otus.long |> 
+  mutate(presence = timeseries.otus.long.presence$relative.abundance)|>
+  filter(OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(presence == 1) |> 
+  group_by(sample.id) |> 
+  summarise(
+    total.present = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.present)*100,
+    percent.rare = (total.rare / total.present)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+when.present.percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna$active.type = "always"
+#when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.common +
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.rare == 
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.present
+
+ggplot(when.present.percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna,
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal() 
+
+
+#blips classified
+when.present.percent.common.blips.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  timeseries.otus.long |> 
+  mutate(presence = timeseries.otus.long.presence$relative.abundance)|>
+  filter(OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(presence == 1) |> 
+  group_by(sample.id) |> 
+  summarise(
+    total.present = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.present)*100,
+    percent.rare = (total.rare / total.present)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+when.present.percent.common.blips.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna$active.type = "blips"
+#when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.common +
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.rare == 
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.present
+
+ggplot(when.present.percent.common.blips.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna, 
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal() 
+
+
+#seasonal Classified
+when.present.percent.common.seasonal.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  timeseries.otus.long |> 
+  mutate(presence = timeseries.otus.long.presence$relative.abundance)|>
+  filter(OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(presence == 1) |> 
+  group_by(sample.id) |> 
+  summarise(
+    total.present = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.present)*100,
+    percent.rare = (total.rare / total.present)*100,
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+when.present.percent.common.seasonal.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna$active.type = "seasonal"
+#when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.common +
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.rare == 
+#  when.present.percent.common.transect.soil.otus.rna.present.atl.once.timeseries.rna$total.present
+
+ggplot(when.present.percent.common.seasonal.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna, 
+       aes(x= sample.id, y= percent.common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal() 
+
+when.present.percent.common.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna <-
+  bind_rows(when.present.percent.common.always.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna, 
+            when.present.percent.common.seasonal.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna)|>
+  bind_rows(when.present.percent.common.blips.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna)
+
+```
+
+
+
+of the times present, what percent of time are they common?
+```{r}
+when.present.percent.of.time.common.transect.soil.otus.rna.present.atl.once.timeseries.rna <-
+  timeseries.otus.long |> 
+  mutate(presence = timeseries.otus.long.presence$relative.abundance)|>
+  filter(OTU %in% names.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |>
+  filter(presence == 1) |> 
+  group_by(OTU) |> 
+  summarise(
+    total.present = n(),
+    total.common = sum(abundance.type == 1),
+    total.rare = sum(abundance.type == 0),
+    percent.common = (total.common / total.present)*100,
+    percent.rare = (total.rare / total.present)*100
+  ) |> 
+  mutate(mean.percent.common = mean(percent.common)) |> 
+  left_join(new.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna, by = "OTU") |> 
+  rename( active.type = active)
+  
+
+when.present.percent.of.time.common.alway.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  when.present.percent.of.time.common.transect.soil.otus.rna.present.atl.once.timeseries.rna |> 
+  filter( OTU %in% new.always.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+when.present.percent.of.time.common.seasonal.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  when.present.percent.of.time.common.transect.soil.otus.rna.present.atl.once.timeseries.rna |> 
+  filter( OTU %in% new.seasonal.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+when.present.percent.of.time.common.blips.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna<-
+  when.present.percent.of.time.common.transect.soil.otus.rna.present.atl.once.timeseries.rna |> 
+  filter( OTU %in% new.blips.classified.transect.soil.otus.dna.present.atl.once.timeseries.rna$OTU) |> 
+  mutate(mean.percent.common = mean(percent.common))
+
+
+```
+
+
+
+
+Make box plots 1) %OTUs, 2)%of time
+
+```{r}
+
+when.present.percent.of.time.common.transect.soil.otus.rna.present.atl.once.timeseries.rna |>
+  mutate(active.type = factor(active.type, levels = c("blips", "seasonal", "always"))) |> 
+  ggplot(aes(x = active.type, y = percent.common, color = active.type)) +
+  geom_boxplot() +
+  guides( color = "none") +
+  labs( x = "Activity Pattern", y = "Percent of time \ncommon when present") +
+  scale_x_discrete(labels = 
+                     c("blips" = "Momentarily \nActive", 
+                       "seasonal" = "Seasonally \nActive", 
+                       "always" = "Always \nActive")) +
+  theme(
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 15),
+    plot.margin = margin(20, 10),
+    axis.title.y = element_text(hjust = 0.72)) +
+  scale_color_manual( values = c( "blips" = "#A42F2F", #red
+                                  "seasonal" = "#3A8639", #green
+                                  "always" = "#3F2BBD" #blue
+                                  ))
+
+ggsave("soil_taxa_percent_of_times_common_when_present.pdf", path = "./figures")
+
+when.present.percent.common.classified.transect.soil.otus.rna.present.atl.once.timeseries.rna |> 
+  mutate(active.type = factor(active.type, levels = c( "blips", "seasonal", "always"))) |> 
+  ggplot(aes(x = active.type, y = percent.common, color = active.type)) +
+  geom_boxplot() +
+  guides(color = "none") +
+  labs( x = "Activity Pattern", y = "Percent of taxa \ncommon when present") +
+  scale_x_discrete(labels = 
+                     c("blips" = "Momentarily \nActive", 
+                       "seasonal" = "Seasonally \nActive", 
+                       "always" = "Always \nActive")) +
+  theme(
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 15),
+    plot.margin = margin(20, 20),
+    axis.title.y = element_text( hjust = 0.72)) +
+  scale_color_manual( values = c( "blips" = "#A42F2F", #red
+                                  "seasonal" = "#3A8639", #green
+                                  "always" = "#3F2BBD" #blue
+                                  ))
+
+ggsave("percent_of_soil_taxa_common_when_present.pdf", path = "./figures")
+
+```
+
+
+Getting example OTUs to represent different activity patterns
+
+```{r}
+#Always: selected Otu00001
+timeseries.otus.long.presence |> 
+  filter(OTU == "Otu00001") |> 
+  ggplot(aes(x = date, y = relative.abundance)) +
+  facet_wrap(~OTU) +
+  geom_line( alpha = 1, color = "#3F2BBD") +
+  scale_y_continuous( limits = c(-0.5, 1.5)) +
+  labs(
+    x = "Weeks",
+    y = ""
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text.x = element_text( size = 12)
+  )
+
+ggsave("always_example_otu.pdf", path = "./figures")
+
+
+#Seasonal: selected Otu00078
+timeseries.otus.long.presence |> 
+  filter(OTU == "Otu00078") |> 
+  ggplot(aes(x = date, y = relative.abundance)) +
+  facet_wrap(~OTU) +
+  geom_line( alpha = 1, color = "#3A8639") +
+  scale_y_continuous( limits = c(-0.5, 1.5)) +
+  labs(
+    x = "Weeks",
+    y = ""
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text.x = element_text( size = 12)
+  )
+
+ggsave("seasonal_example_otu.pdf", path = "./figures")
+
+
+
+#Blips: selected Otu00042
+timeseries.otus.long.presence |> 
+  filter(OTU == "Otu00042") |> 
+  ggplot(aes(x = date, y = relative.abundance)) +
+  facet_wrap(~OTU,) +
+  geom_line( alpha = 1, color = "#A42F2F" ) +
+  scale_y_continuous( limits = c(-0.5, 1.5)) +
+  labs(
+    x = "Weeks",
+    y = ""
+  ) +
+  theme(
+    axis.title = element_text( face = "bold", size = 20),
+    axis.text.x = element_text( size = 12),
+  )
+
+ggsave("blips_example_otu.pdf", path = "./figures")
+
+
+```
+
+
+
+Looking at rel. abundance of "soil taxa" in soil samples
+```{r}
+
+
 
 ```
 

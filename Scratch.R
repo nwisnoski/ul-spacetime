@@ -660,3 +660,29 @@ RG.clsfd.ac <- RG.middle.Ac |>
                                             if_else(rel.ab < exp(-6), 3, 
                                                     if_else(rel.ab < exp(-4), 2, 
                                                             if_else(rel.ab < exp(-2), 1, 12)))))))
+
+
+
+
+# trying to see %contribution separarey from rare and common
+
+OTU.ts.long<- OTU.ts.long |> 
+  mutate(abundance.type= if_else(relative.abundance >= 0.001, 1, 0))
+
+always.common.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |>
+  filter(abundance.type == 1) |> 
+  aggregate(relative.abundance ~ sample.id, 
+                             FUN = sum)
+always.rare.abundance <- OTU.ts.long |> 
+  filter(OTU %in% new.sorted.otu.always$OTU) |>
+  filter(abundance.type == 0) |> 
+  aggregate(relative.abundance ~ sample.id, 
+            FUN = sum)
+
+aggregate.abundance.soil.otus <- always.abundance |> 
+  rename(aggregate.abundance = relative.abundance) |>
+  mutate(common.abundance = always.common.abundance$relative.abundance) |>
+  left_join(always.rare.abundance, by = 'sample.id') |> 
+  rename(rare.abundance = relative.abundance) |> 
+  mutate(rare.abundance = replace_na(rare.abundance, 0))
