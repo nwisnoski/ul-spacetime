@@ -863,7 +863,7 @@ ggplot(aggregate.abundance.new.transient.classified.transect.soil.otus.dna.prese
 ```
 
 
-*Start here
+
 %contribution of soil otus to community, ALL TOGETHER
 ```{r}
 total.abundance.transect.soil.otus.dna.present.atl.once.timeseries.rna <- 
