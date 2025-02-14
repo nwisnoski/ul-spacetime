@@ -13,7 +13,6 @@ header-includes:
 - \usepackage{array}
 - \usepackage{graphics}
 ---
----
 
 
 normal para text

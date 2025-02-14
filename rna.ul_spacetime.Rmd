@@ -13,7 +13,7 @@ header-includes:
 - \usepackage{array}
 - \usepackage{graphics}
 ---
----
+
 
 
 normal para text
@@ -194,20 +194,24 @@ transect.otus <- otus[str_which(rownames(otus), "RG"),]
 print(length(which(transect.otus == 0))) #3234533 
 
 # separate RNA and DNA dynamics
-transect.otus.rna <- transect.otus[str_which(rownames(transect.otus), "RGc"),] 
-print(length(which(transect.otus.rna == 0))) #1498062 
+transect.otus.rna.og <- transect.otus[str_which(rownames(transect.otus), "RGc"),] 
+print(length(which(transect.otus.rna.og == 0))) #1498062 
 
 transect.otus.dna <- transect.otus[str_which(rownames(transect.otus), "RGD"),] 
 print(length(which(transect.otus.dna == 0))) #1491145 
  
 
-transect.otus.dna.presence <- decostand(transect.otus.dna + transect.otus.rna, "pa") 
+transect.otus.dna.presence <- decostand(transect.otus.dna + transect.otus.rna.og, "pa") 
 print(length(which(transect.otus.dna.presence == 1))) #10082
 print(length(which(transect.otus.dna.presence == 0))) #1490092
 
-transect.otus.rna.presence <- decostand(transect.otus.rna, "pa") 
+transect.otus.rna.presence <- decostand(transect.otus.rna.og, "pa") 
 print(length(which(transect.otus.rna.presence == 1))) #2112 
 print(length(which(transect.otus.rna.presence == 0))) #1498062
+
+transect.otus.rna.present <- colnames(transect.otus.rna.presence[, colSums(transect.otus.rna.presence) > 0])
+
+transect.otus.rna <- transect.otus.dna[, colnames(transect.otus.dna) %in% transect.otus.rna.present]
 
 transect.otus.dna2.presence <- decostand(transect.otus.dna, "pa") 
 print(length(which(transect.otus.dna2.presence == 1))) #9029 
@@ -215,7 +219,6 @@ print(length(which(transect.otus.dna2.presence == 0))) #1491145
 
 #transect.soil.1<- transect.otus.rna.presence[1, transect.otus.rna.presence[1,]==1, drop= FALSE]
 #sample code to use in the loop
-
 
 for (k in 1:18) {
   
