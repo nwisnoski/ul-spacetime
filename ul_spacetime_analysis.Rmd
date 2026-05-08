@@ -1,0 +1,929 @@
+---
+title: "Dynamics of aquatic and soil-derived bacteria in a temperate lake"
+author: "Tajinder Singh, Nathan I. Wisnoski"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document:
+    fig_caption: yes
+    keep_tex: yes
+header-includes:
+- \usepackage{array}
+- \usepackage{graphics}
+---
+
+# Overview
+
+This analysis evaluates temporal dynamics of aquatic and soil-associated bacterial OTUs in a temperate lake. The workflow identifies taxa detected in soil, taxa shared between soil and aquatic samples, taxa unique to aquatic samples, and temporal activity patterns based on RNA detections through time.
+
+# Setup
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(
+  fig.width = 6,
+  fig.align = "center",
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+## Load packages and helper functions
+
+```{r packages, results='hide'}
+library(tidyverse)
+library(vegan)
+library(viridis)
+library(lubridate)
+library(readxl)
+library(writexl)
+library(colorspace)
+library(ggpubr)
+
+source("bin/mothur_tools.R")
+
+se <- function(x) {
+  sd(x, na.rm = TRUE) / sqrt(length(na.omit(x)))
+}
+
+cv <- function(x) {
+  sd(x, na.rm = TRUE) / mean(x, na.rm = TRUE)
+}
+```
+
+## Define paths and constants
+
+```{r paths-and-constants}
+paths <- list(
+  design = "data/UL.design.txt",
+  shared = "data/ul_resgrad.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.pick.opti_mcc.shared",
+  taxonomy = "data/ul_resgrad.trim.contigs.good.unique.good.filter.unique.precluster.pick.pick.pick.opti_mcc.0.03.cons.taxonomy",
+  timeseries_design = "data/UL_timeseries_design.csv",
+  env_data = "data/ul-seedbank.env.txt",
+  soil_activity_manual = "soil_otu_activity_pattern/new.sortedotus.xlsx",
+  aquatic_persistent_manual = "aquatic_otu_activity_pattern/new.persistent.classified.timeseries.aquatic.otus.rna.present.atl.once.csv",
+  aquatic_seasonal_manual = "aquatic_otu_activity_pattern/new.seasonal.classified.timeseries.aquatic.otus.rna.present.atl.once.csv",
+  aquatic_transient_manual = "aquatic_otu_activity_pattern/new.transient.classified.timeseries.aquatic.otus.rna.present.atl.once.csv",
+  figures = "figures"
+)
+
+rare_common_threshold <- 0.001
+persistent_threshold <- 0.90
+transient_threshold <- 0.10
+rarefaction_seed <- 12742899
+
+dir.create(paths$figures, showWarnings = FALSE, recursive = TRUE)
+```
+
+## Figure theme
+
+```{r figure-theme}
+my_cols <- RColorBrewer::brewer.pal(n = 4, name = "Greys")[3:4]
+
+activity_colors <- c(
+  transient = "#A42F2F",
+  seasonal = "#3A8639",
+  persistent = "#3F2BBD",
+  unpatterned = "grey50"
+)
+
+abundance_colors <- c(
+  aggregate_abundance = "#460E5F",
+  common_abundance = "#B16415",
+  rare_abundance = "#237B75"
+)
+
+theme_set(
+  theme_classic() +
+    theme(
+      axis.title = element_text(size = 14),
+      axis.title.x = element_text(margin = margin(t = 15, b = 15)),
+      axis.title.y = element_text(margin = margin(l = 15, r = 15)),
+      axis.text = element_text(size = 12),
+      axis.text.x = element_text(margin = margin(t = 5)),
+      axis.text.y = element_text(margin = margin(r = 5)),
+      axis.line.x = element_blank(),
+      axis.line.y = element_blank(),
+      axis.ticks.x = element_line(linewidth = 1),
+      axis.ticks.y = element_line(linewidth = 1),
+      axis.ticks.length = unit(0.1, "in"),
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 1.5),
+      legend.title = element_blank(),
+      legend.text = element_text(size = 14),
+      strip.text = element_text(size = 12),
+      strip.background = element_blank()
+    )
+)
+```
+
+# Helper functions
+
+```{r helper-functions}
+make_rel_abund <- function(count_table) {
+  decostand(count_table, method = "total")
+}
+
+make_presence <- function(count_table) {
+  decostand(count_table, method = "pa")
+}
+
+make_long_otu_table <- function(otu_table, metadata, sample_col = "sample.id") {
+  otu_table |>
+    as_tibble() |>
+    mutate(
+      sample.id = metadata[[sample_col]],
+      .before = 1
+    ) |>
+    mutate(sample.id = as.integer(sample.id)) |>
+    pivot_longer(
+      cols = -sample.id,
+      names_to = "OTU",
+      values_to = "relative_abundance"
+    ) |>
+    left_join(metadata, by = "sample.id")
+}
+
+summarize_taxon_abundance <- function(long_data, taxa, metadata) {
+  long_data |>
+    filter(OTU %in% taxa) |>
+    group_by(sample.id) |>
+    summarize(relative_abundance = sum(relative_abundance), .groups = "drop") |>
+    left_join(metadata |> select(sample.id, date), by = "sample.id")
+}
+
+classify_activity_patterns <- function(presence_table,
+                                       persistent_cutoff = persistent_threshold,
+                                       transient_cutoff = transient_threshold) {
+  timeseries_length <- nrow(presence_table)
+
+  tibble(
+    OTU = colnames(presence_table),
+    occupancy = colSums(presence_table) / timeseries_length,
+    persistent = occupancy > persistent_cutoff,
+    transient = occupancy < transient_cutoff,
+    activity_pattern = case_when(
+      persistent ~ "persistent",
+      transient ~ "transient",
+      TRUE ~ "seasonal"
+    )
+  ) |>
+    select(OTU, occupancy, activity_pattern)
+}
+
+classify_activity_patterns_with_seasonality <- function(long_data,
+                                                        presence_table,
+                                                        taxa,
+                                                        persistent_cutoff = persistent_threshold,
+                                                        transient_cutoff = transient_threshold,
+                                                        seasonal_ratio_cutoff = 0.90) {
+  timeseries_length <- nrow(presence_table)
+
+  within_month_var <- long_data |>
+    mutate(month = month(date)) |>
+    filter(OTU %in% taxa) |>
+    group_by(OTU, month) |>
+    summarize(var_within_month = sd(relative_abundance), .groups = "drop") |>
+    group_by(OTU) |>
+    summarize(var_within_month_mean = mean(var_within_month, na.rm = TRUE), .groups = "drop")
+
+  within_year_var <- long_data |>
+    mutate(year = year(date)) |>
+    filter(OTU %in% taxa) |>
+    group_by(OTU, year) |>
+    summarize(var_within_year = sd(relative_abundance), .groups = "drop") |>
+    group_by(OTU) |>
+    summarize(var_within_year_mean = mean(var_within_year, na.rm = TRUE), .groups = "drop")
+
+  among_month_var <- long_data |>
+    mutate(month = month(date)) |>
+    filter(OTU %in% taxa) |>
+    group_by(OTU, month) |>
+    summarize(mean_abund = mean(relative_abundance), .groups = "drop") |>
+    group_by(OTU) |>
+    summarize(var_across_month = sd(mean_abund), .groups = "drop")
+
+  activity_summary <- tibble(
+    OTU = colnames(presence_table),
+    occupancy = colSums(presence_table) / timeseries_length,
+    persistent = occupancy > persistent_cutoff,
+    transient = occupancy < transient_cutoff
+  )
+
+  activity_summary |>
+    left_join(within_month_var, by = "OTU") |>
+    left_join(within_year_var, by = "OTU") |>
+    left_join(among_month_var, by = "OTU") |>
+    mutate(
+      seasonal_ratio = var_within_month_mean / var_within_year_mean,
+      seasonal = !persistent & !transient & seasonal_ratio < seasonal_ratio_cutoff,
+      activity_pattern = case_when(
+        persistent ~ "persistent",
+        transient ~ "transient",
+        seasonal ~ "seasonal",
+        TRUE ~ "unpatterned"
+      )
+    ) |>
+    select(OTU, occupancy, seasonal_ratio, activity_pattern)
+}
+
+plot_activity_facets <- function(long_data, taxa, y_var = relative_abundance, x_var = date) {
+  long_data |>
+    filter(OTU %in% taxa) |>
+    ggplot(aes(x = {{ x_var }}, y = {{ y_var }}, group = OTU)) +
+    geom_line(alpha = 0.3) +
+    facet_wrap(~OTU, scales = "free_y") +
+    theme_minimal()
+}
+
+summarize_common_rare_abundance <- function(long_data, taxa, metadata) {
+  total_abundance <- long_data |>
+    filter(OTU %in% taxa) |>
+    group_by(sample.id) |>
+    summarize(aggregate_abundance = sum(relative_abundance), .groups = "drop")
+
+  rare_abundance <- long_data |>
+    filter(OTU %in% taxa, abundance_type == "rare") |>
+    group_by(sample.id) |>
+    summarize(rare_abundance = sum(relative_abundance), .groups = "drop")
+
+  common_abundance <- long_data |>
+    filter(OTU %in% taxa, abundance_type == "common") |>
+    group_by(sample.id) |>
+    summarize(common_abundance = sum(relative_abundance), .groups = "drop")
+
+  total_abundance |>
+    left_join(rare_abundance, by = "sample.id") |>
+    left_join(common_abundance, by = "sample.id") |>
+    mutate(across(contains("abundance"), ~replace_na(.x, 0))) |>
+    left_join(metadata |> select(sample.id, date), by = "sample.id")
+}
+
+make_max_rel_abund_table <- function(count_table, value_name, type_name) {
+  count_table |>
+    as.data.frame() |>
+    make_rel_abund() |>
+    t() |>
+    as.data.frame() |>
+    filter(rowSums(pick(everything())) > 0) |>
+    mutate(
+      "{value_name}" := apply(pick(everything()), 1, max),
+      "{type_name}" := if_else(.data[[value_name]] > rare_common_threshold, "common", "rare")
+    ) |>
+    rownames_to_column(var = "OTU") |>
+    select(OTU, all_of(value_name), all_of(type_name))
+}
+```
+
+# Import and prepare data
+
+```{r import-data}
+sample_design <- read.delim(paths$design, header = TRUE, row.names = 1)
+
+otu_counts <- read.otu(shared = paths$shared, cutoff = "0.03")
+otu_taxonomy <- read.tax(taxonomy = paths$taxonomy, format = "rdp")
+
+otu_counts <- otu_counts[rownames(otu_counts) != "RGMockComm", ]
+
+set.seed(rarefaction_seed)
+otu_counts <- rrarefy(otu_counts, min(rowSums(otu_counts)))
+otu_rel_abund <- make_rel_abund(otu_counts)
+
+sum(otu_counts == 0)
+```
+
+# Time-series samples
+
+```{r prepare-timeseries-data}
+timeseries_counts <- otu_counts[str_which(rownames(otu_counts), "UL"), ]
+
+timeseries_design <- read_csv(paths$timeseries_design, show_col_types = FALSE)
+timeseries_counts <- timeseries_counts[match(timeseries_design$sample.name, rownames(timeseries_counts)), ]
+
+timeseries_rna_counts <- timeseries_counts[timeseries_design$sample.type == "RNA", ]
+timeseries_dna_counts <- timeseries_counts[timeseries_design$sample.type == "DNA", ]
+
+timeseries_rna_rel_abund <- make_rel_abund(timeseries_rna_counts)
+timeseries_dna_rel_abund <- make_rel_abund(timeseries_dna_counts)
+
+timeseries_rna_presence <- make_presence(timeseries_rna_counts)
+timeseries_dna_presence <- make_presence(timeseries_dna_counts + timeseries_rna_counts)
+
+env_data <- read.table(paths$env_data, sep = "\t", header = TRUE)
+env_data$date <- as.Date(parse_date_time(env_data$date, "m d y"))
+env_data$doc[env_data$doc == "**"] <- NA
+env_data$doc <- as.numeric(env_data$doc)
+
+timeseries_design <- left_join(
+  timeseries_design,
+  env_data |> select(sample.id, date),
+  by = "sample.id"
+)
+
+env_data <- env_data |> filter(date %in% timeseries_design$date)
+
+timeseries_long <- make_long_otu_table(timeseries_rna_rel_abund, env_data)
+timeseries_presence_long <- make_long_otu_table(timeseries_rna_presence, env_data)
+```
+
+# Soil taxa and shared taxa
+
+```{r soil-and-shared-taxa}
+soil_counts <- otu_counts[str_which(rownames(otu_counts), "RGSoil"), ]
+soil_counts_detected <- soil_counts[, colSums(soil_counts) > 0]
+
+soil_taxa <- colnames(soil_counts_detected)
+nonsoil_taxa <- colnames(soil_counts[, colSums(soil_counts) == 0])
+
+length(soil_taxa) + length(nonsoil_taxa) == ncol(otu_counts)
+
+soil_max_rel_abund <- apply(make_rel_abund(soil_counts), 2, max)
+soil_common_taxa <- names(soil_max_rel_abund[soil_max_rel_abund >= rare_common_threshold])
+soil_rare_taxa <- names(soil_max_rel_abund[soil_max_rel_abund < rare_common_threshold])
+
+length(soil_common_taxa) + length(soil_rare_taxa) == ncol(otu_counts)
+```
+
+# Transect samples
+
+```{r prepare-transect-data}
+transect_counts <- otu_counts[str_which(rownames(otu_counts), "RG"), ]
+transect_rna_counts <- transect_counts[str_which(rownames(transect_counts), "RGc"), ]
+transect_dna_counts <- transect_counts[str_which(rownames(transect_counts), "RGD"), ]
+
+transect_rna_presence <- make_presence(transect_rna_counts)
+transect_dna_presence <- make_presence(transect_dna_counts + transect_rna_counts)
+transect_dna_only_presence <- make_presence(transect_dna_counts)
+
+transect_rna_taxa <- colnames(transect_rna_presence[, colSums(transect_rna_presence) > 0])
+transect_dna_taxa <- colnames(transect_dna_presence[, colSums(transect_dna_presence) > 0])
+
+shared_rna_taxa <- intersect(soil_taxa, transect_rna_taxa)
+shared_dna_taxa <- intersect(soil_taxa, transect_dna_taxa)
+```
+
+# Activity patterns of shared taxa
+
+```{r classify-shared-taxa}
+timeseries_rna_active_once <- timeseries_rna_presence[, colSums(timeseries_rna_presence) > 0]
+
+shared_dna_taxa_active_timeseries <- timeseries_rna_active_once[, colnames(timeseries_rna_active_once) %in% shared_dna_taxa]
+shared_rna_taxa_active_timeseries <- timeseries_rna_active_once[, colnames(timeseries_rna_active_once) %in% shared_rna_taxa]
+
+shared_activity_classes_metric <- classify_activity_patterns_with_seasonality(
+  long_data = timeseries_long,
+  presence_table = shared_dna_taxa_active_timeseries,
+  taxa = colnames(shared_rna_taxa_active_timeseries)
+)
+
+shared_activity_classes_metric |> count(activity_pattern)
+```
+
+## Load manually curated shared-taxon activity classes
+
+```{r load-manual-shared-activity-classes}
+shared_persistent_taxa <- read_excel(paths$soil_activity_manual, sheet = "persistent")
+shared_seasonal_taxa <- read_excel(paths$soil_activity_manual, sheet = "seasonal")
+shared_transient_taxa <- read_excel(paths$soil_activity_manual, sheet = "transient")
+
+shared_activity_classes <- bind_rows(
+  shared_persistent_taxa,
+  shared_seasonal_taxa,
+  shared_transient_taxa
+) |>
+  rename(activity_pattern = active)
+
+shared_activity_classes |> count(activity_pattern)
+```
+
+## Visualize manually curated shared-taxon activity classes
+
+```{r plot-shared-activity-classes}
+plot_activity_facets(timeseries_presence_long, shared_persistent_taxa$OTU) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+
+plot_activity_facets(timeseries_long, shared_persistent_taxa$OTU)
+
+plot_activity_facets(timeseries_presence_long, shared_seasonal_taxa$OTU) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+
+plot_activity_facets(timeseries_long, shared_seasonal_taxa$OTU)
+
+plot_activity_facets(timeseries_presence_long, shared_transient_taxa$OTU[1:60]) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+
+plot_activity_facets(timeseries_long, shared_transient_taxa$OTU[1:100])
+```
+
+# Contribution of shared taxa to the active aquatic community
+
+```{r shared-taxon-contributions}
+shared_persistent_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = shared_persistent_taxa$OTU,
+  metadata = env_data
+)
+
+shared_seasonal_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = shared_seasonal_taxa$OTU,
+  metadata = env_data
+)
+
+shared_transient_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = shared_transient_taxa$OTU,
+  metadata = env_data
+)
+
+shared_contribution_long <- bind_rows(
+  shared_persistent_abund |> mutate(activity_pattern = "persistent"),
+  shared_seasonal_abund |> mutate(activity_pattern = "seasonal"),
+  shared_transient_abund |> mutate(activity_pattern = "transient")
+)
+
+shared_contribution_long |>
+  mutate(activity_pattern = factor(activity_pattern, levels = c("transient", "seasonal", "persistent"))) |>
+  ggplot(aes(x = date, y = relative_abundance * 100, color = activity_pattern)) +
+  geom_line(alpha = 0.8) +
+  labs(x = "", y = "Percent Abundance") +
+  scale_y_continuous(limits = c(0, 65)) +
+  scale_color_discrete_qualitative(palette = "Dark3") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    legend.position = "inside",
+    legend.position.inside = c(0.15, 0.84)
+  )
+
+ggsave(
+  filename = "soil_taxa_percent_contribution_all.pdf",
+  width = 6,
+  height = 4.5,
+  path = paths$figures
+)
+```
+
+# Aquatic-only taxa
+
+```{r aquatic-only-taxa}
+aquatic_only_presence <- timeseries_rna_active_once[, !(colnames(timeseries_rna_active_once) %in% shared_dna_taxa)]
+aquatic_only_taxa <- tibble(OTU = colnames(aquatic_only_presence))
+
+aquatic_activity_classes_metric <- classify_activity_patterns(aquatic_only_presence)
+aquatic_activity_classes_metric |> count(activity_pattern)
+
+write_xlsx(
+  aquatic_activity_classes_metric,
+  "classified_timeseries_aquatic_otus_rna_present_at_least_once.xlsx"
+)
+```
+
+## Load manually curated aquatic-only activity classes
+
+```{r load-manual-aquatic-activity-classes}
+aquatic_persistent_taxa <- read_csv(paths$aquatic_persistent_manual, show_col_types = FALSE)
+aquatic_seasonal_taxa <- read_csv(paths$aquatic_seasonal_manual, show_col_types = FALSE)
+aquatic_transient_taxa <- read_csv(paths$aquatic_transient_manual, show_col_types = FALSE)
+
+aquatic_activity_classes <- bind_rows(
+  aquatic_persistent_taxa,
+  aquatic_seasonal_taxa,
+  aquatic_transient_taxa
+) |>
+  rename(activity_pattern = active)
+
+aquatic_activity_classes |> count(activity_pattern)
+```
+
+## Visualize aquatic-only activity classes
+
+```{r plot-aquatic-activity-classes}
+plot_activity_facets(timeseries_presence_long, aquatic_persistent_taxa$OTU) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+
+plot_activity_facets(timeseries_presence_long, aquatic_seasonal_taxa$OTU[1:30]) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+
+plot_activity_facets(timeseries_presence_long, aquatic_transient_taxa$OTU[1:30]) +
+  scale_y_continuous(limits = c(-0.5, 1.5))
+```
+
+# Contribution of aquatic-only taxa to the active aquatic community
+
+```{r aquatic-only-contributions}
+aquatic_persistent_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = aquatic_persistent_taxa$OTU,
+  metadata = env_data
+)
+
+aquatic_seasonal_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = aquatic_seasonal_taxa$OTU,
+  metadata = env_data
+)
+
+aquatic_transient_abund <- summarize_taxon_abundance(
+  long_data = timeseries_long,
+  taxa = aquatic_transient_taxa$OTU,
+  metadata = env_data
+)
+
+bind_rows(
+  aquatic_persistent_abund |> mutate(activity_pattern = "persistent"),
+  aquatic_seasonal_abund |> mutate(activity_pattern = "seasonal"),
+  aquatic_transient_abund |> mutate(activity_pattern = "transient")
+) |>
+  mutate(activity_pattern = factor(activity_pattern, levels = c("transient", "seasonal", "persistent"))) |>
+  ggplot(aes(x = date, y = relative_abundance, color = activity_pattern)) +
+  geom_line(alpha = 0.8) +
+  theme_minimal()
+```
+
+# Rare and common contributions among shared taxa
+
+```{r rare-common-prep}
+timeseries_long <- timeseries_long |>
+  mutate(
+    abundance_type = if_else(
+      relative_abundance >= rare_common_threshold,
+      "common",
+      "rare"
+    )
+  )
+
+timeseries_presence_long <- timeseries_presence_long |>
+  rename(presence = relative_abundance)
+```
+
+## Partition shared-taxon abundance into rare and common components
+
+```{r rare-common-shared-abundance}
+shared_common_rare_wide <- summarize_common_rare_abundance(
+  long_data = timeseries_long,
+  taxa = shared_dna_taxa_active_timeseries |> colnames(),
+  metadata = env_data
+)
+
+shared_common_rare_long <- shared_common_rare_wide |>
+  pivot_longer(
+    cols = contains("abundance"),
+    names_to = "abundance_type",
+    values_to = "abundance"
+  )
+
+shared_common_rare_long |>
+  ggplot(aes(x = sample.id, y = abundance * 100, color = abundance_type)) +
+  geom_line(alpha = 0.8) +
+  facet_wrap(
+    ~abundance_type,
+    labeller = labeller(
+      abundance_type = c(
+        aggregate_abundance = "All Taxa",
+        common_abundance = "Common Taxa",
+        rare_abundance = "Rare Taxa"
+      )
+    )
+  ) +
+  guides(color = "none") +
+  labs(
+    x = "Weeks",
+    y = "Percent Abundance\nfrom Active Shared Taxa"
+  ) +
+  scale_color_manual(values = abundance_colors) +
+  theme(
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    aspect.ratio = 0.8,
+    strip.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold")
+  )
+
+ggsave(
+  filename = "percent_contribution_of_active_shared_taxa_in_aquatic_community.pdf",
+  path = paths$figures,
+  height = 10,
+  width = 13,
+  units = "in"
+)
+```
+
+## Percent of present shared taxa that are common
+
+```{r percent-common-when-present}
+shared_presence_with_abundance_type <- timeseries_long |>
+  select(sample.id, OTU, relative_abundance, abundance_type) |>
+  left_join(
+    timeseries_presence_long |> select(sample.id, OTU, presence),
+    by = c("sample.id", "OTU")
+  )
+
+shared_percent_common_by_sample <- shared_presence_with_abundance_type |>
+  filter(OTU %in% colnames(shared_dna_taxa_active_timeseries), presence == 1) |>
+  group_by(sample.id) |>
+  summarize(
+    total_present = n(),
+    total_common = sum(abundance_type == "common"),
+    total_rare = sum(abundance_type == "rare"),
+    percent_common = 100 * total_common / total_present,
+    percent_rare = 100 * total_rare / total_present,
+    .groups = "drop"
+  )
+
+shared_percent_common_by_sample |>
+  ggplot(aes(x = sample.id, y = percent_common)) +
+  geom_line(alpha = 0.3) +
+  theme_minimal()
+```
+
+## Percent common by activity class
+
+```{r percent-common-by-activity-class}
+percent_common_by_activity_class <- function(long_data, presence_long, taxa, activity_pattern) {
+  long_data |>
+    select(sample.id, OTU, relative_abundance, abundance_type) |>
+    left_join(
+      presence_long |> select(sample.id, OTU, presence),
+      by = c("sample.id", "OTU")
+    ) |>
+    filter(OTU %in% taxa, presence == 1) |>
+    group_by(sample.id) |>
+    summarize(
+      total_present = n(),
+      total_common = sum(abundance_type == "common"),
+      total_rare = sum(abundance_type == "rare"),
+      percent_common = 100 * total_common / total_present,
+      percent_rare = 100 * total_rare / total_present,
+      .groups = "drop"
+    ) |>
+    mutate(activity_pattern = activity_pattern)
+}
+
+shared_percent_common_by_activity <- bind_rows(
+  percent_common_by_activity_class(timeseries_long, timeseries_presence_long, shared_persistent_taxa$OTU, "persistent"),
+  percent_common_by_activity_class(timeseries_long, timeseries_presence_long, shared_seasonal_taxa$OTU, "seasonal"),
+  percent_common_by_activity_class(timeseries_long, timeseries_presence_long, shared_transient_taxa$OTU, "transient")
+)
+
+shared_percent_common_by_activity |>
+  mutate(activity_pattern = factor(activity_pattern, levels = c("transient", "seasonal", "persistent"))) |>
+  ggplot(aes(x = activity_pattern, y = percent_common, color = activity_pattern)) +
+  geom_boxplot() +
+  guides(color = "none") +
+  labs(
+    x = "Activity Pattern",
+    y = "Percent of taxa\ncommon when present"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 15),
+    plot.margin = margin(20, 20),
+    axis.title.y = element_text(hjust = 0.72)
+  ) +
+  scale_color_manual(values = activity_colors)
+
+ggsave("percent_of_shared_taxa_common_when_present.pdf", path = paths$figures)
+```
+
+## Percent of time each shared taxon is common when present
+
+```{r percent-time-common-when-present}
+shared_percent_time_common <- shared_presence_with_abundance_type |>
+  filter(OTU %in% colnames(shared_dna_taxa_active_timeseries), presence == 1) |>
+  group_by(OTU) |>
+  summarize(
+    total_present = n(),
+    total_common = sum(abundance_type == "common"),
+    total_rare = sum(abundance_type == "rare"),
+    percent_common = 100 * total_common / total_present,
+    percent_rare = 100 * total_rare / total_present,
+    .groups = "drop"
+  ) |>
+  left_join(shared_activity_classes, by = "OTU")
+
+shared_percent_time_common |>
+  mutate(activity_pattern = factor(activity_pattern, levels = c("transient", "seasonal", "persistent"))) |>
+  ggplot(aes(x = activity_pattern, y = percent_common, color = activity_pattern)) +
+  geom_boxplot() +
+  guides(color = "none") +
+  labs(
+    x = "Activity Pattern",
+    y = "Percent of time\ncommon when present"
+  ) +
+  theme(
+    axis.title = element_text(face = "bold", size = 20),
+    axis.text = element_text(size = 15),
+    plot.margin = margin(20, 10),
+    axis.title.y = element_text(hjust = 0.72)
+  ) +
+  scale_color_manual(values = activity_colors)
+
+ggsave("shared_taxa_percent_of_times_common_when_present.pdf", path = paths$figures)
+```
+
+# Example OTUs representing activity patterns
+
+```{r example-otus}
+plot_example_otu <- function(presence_long, otu, color, output_file) {
+  p <- presence_long |>
+    filter(OTU == otu) |>
+    ggplot(aes(x = date, y = presence)) +
+    facet_wrap(~OTU) +
+    geom_line(alpha = 1, color = color) +
+    scale_y_continuous(limits = c(-0.5, 1.5)) +
+    labs(x = "Weeks", y = "") +
+    theme(
+      axis.title = element_text(face = "bold", size = 20),
+      axis.text.x = element_text(size = 12)
+    )
+
+  print(p)
+  ggsave(output_file, plot = p, path = paths$figures)
+}
+
+plot_example_otu(timeseries_presence_long, "Otu00001", activity_colors[["persistent"]], "persistent_example_otu.pdf")
+plot_example_otu(timeseries_presence_long, "Otu00078", activity_colors[["seasonal"]], "seasonal_example_otu.pdf")
+plot_example_otu(timeseries_presence_long, "Otu00042", activity_colors[["transient"]], "transient_example_otu.pdf")
+```
+
+# Maximum relative abundance in soil, transect, and time series
+
+```{r max-relative-abundance}
+soil_taxa_rel_abund <- soil_counts_detected |>
+  as.data.frame() |>
+  make_rel_abund() |>
+  rownames_to_column(var = "sample_id") |>
+  pivot_longer(
+    cols = -sample_id,
+    names_to = "OTU",
+    values_to = "soil_rel_abundance"
+  ) |>
+  mutate(soil_abundance_type = if_else(soil_rel_abundance > rare_common_threshold, "common", "rare"))
+
+soil_taxa_max_rel_abund <- soil_taxa_rel_abund |>
+  group_by(OTU) |>
+  summarize(
+    soil_max_rel_abundance = max(soil_rel_abundance),
+    soil_max_abundance_type = if_else(soil_max_rel_abundance > rare_common_threshold, "common", "rare"),
+    .groups = "drop"
+  )
+
+transect_dna_max_rel_abund <- make_max_rel_abund_table(
+  transect_dna_counts,
+  value_name = "transect_dna_max_rel_abundance",
+  type_name = "transect_dna_max_abundance_type"
+)
+
+transect_rna_max_rel_abund <- make_max_rel_abund_table(
+  transect_rna_counts,
+  value_name = "transect_rna_max_rel_abundance",
+  type_name = "transect_rna_max_abundance_type"
+)
+
+timeseries_dna_max_rel_abund <- make_max_rel_abund_table(
+  timeseries_dna_counts,
+  value_name = "timeseries_dna_max_rel_abundance",
+  type_name = "timeseries_dna_max_abundance_type"
+)
+
+timeseries_rna_max_rel_abund <- make_max_rel_abund_table(
+  timeseries_rna_counts,
+  value_name = "timeseries_rna_max_rel_abundance",
+  type_name = "timeseries_rna_max_abundance_type"
+)
+
+timeseries_rna_shared_taxa <- timeseries_rna_active_once |>
+  as.data.frame() |>
+  select(any_of(colnames(soil_counts_detected))) |>
+  colnames()
+
+combined_activity_classes <- bind_rows(
+  aquatic_activity_classes,
+  shared_activity_classes
+) |>
+  distinct(OTU, .keep_all = TRUE)
+
+shared_taxa_summary <- tibble(OTU = timeseries_rna_shared_taxa) |>
+  left_join(soil_taxa_max_rel_abund, by = "OTU") |>
+  left_join(transect_dna_max_rel_abund, by = "OTU") |>
+  left_join(transect_rna_max_rel_abund, by = "OTU") |>
+  left_join(timeseries_dna_max_rel_abund, by = "OTU") |>
+  left_join(timeseries_rna_max_rel_abund, by = "OTU") |>
+  left_join(combined_activity_classes, by = "OTU")
+```
+
+## Soil versus aquatic transect maximum abundance
+
+```{r plot-soil-vs-transect-max-abundance}
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_rel_abundance,
+    y = transect_dna_max_rel_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = rare_common_threshold, color = "grey") +
+  geom_vline(xintercept = rare_common_threshold, color = "grey") +
+  geom_point(alpha = 0.25, size = 3) +
+  labs(
+    x = "Max. Rel. Abundance\nin Soil",
+    y = "Max. Rel. Abundance\nin Aquatic Transect"
+  ) +
+  annotate("text", x = 10^(-1), y = 10^(-1), label = "DNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  coord_fixed(ratio = 1) +
+  scale_color_manual(values = activity_colors, na.value = "grey70") +
+  theme(
+    legend.position = c(0.98, 0.7),
+    legend.justification = c(1, 0),
+    legend.box.margin = margin(t = 0, r = 0, b = 0, l = 0),
+    legend.text = element_text(face = "bold"),
+    legend.background = element_rect(linewidth = 0.3, colour = "black"),
+    strip.text = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold", size = 14),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+ggsave(filename = "newfigure_dna.pdf", path = paths$figures, width = 6, height = 6, units = "in")
+
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_rel_abundance,
+    y = transect_rna_max_rel_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = rare_common_threshold, color = "grey") +
+  geom_vline(xintercept = rare_common_threshold, color = "grey") +
+  geom_point(alpha = 0.25, size = 3) +
+  labs(
+    x = "Max. Rel. Abundance\nin Soil",
+    y = "Max. Rel. Abundance\nin Aquatic Transect"
+  ) +
+  annotate("text", x = 10^(-1), y = 10^(-1), label = "RNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  coord_fixed(ratio = 1) +
+  scale_color_manual(values = activity_colors, na.value = "grey70") +
+  theme(
+    legend.position = c(0.98, 0.7),
+    legend.justification = c(1, 0),
+    legend.box.margin = margin(t = 0, r = 0, b = 0, l = 0),
+    legend.text = element_text(face = "bold"),
+    legend.background = element_rect(linewidth = 0.3, colour = "black"),
+    strip.text = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold", size = 14),
+    plot.title = element_text(face = "bold", size = 14)
+  )
+
+ggsave(filename = "newfigure_rna.pdf", path = paths$figures, width = 6, height = 6, units = "in")
+```
+
+## Soil versus aquatic time-series maximum abundance
+
+```{r plot-soil-vs-timeseries-max-abundance}
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_rel_abundance,
+    y = timeseries_dna_max_rel_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = rare_common_threshold, color = "grey") +
+  geom_vline(xintercept = rare_common_threshold, color = "grey") +
+  geom_point() +
+  labs(
+    x = "Max. Rel. Abundance\nin Soil",
+    y = "Max. Rel. Abundance\nin Aquatic Time Series"
+  ) +
+  annotate("text", x = 10^(-1), y = 10^(-1), label = "DNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  coord_fixed(ratio = 1) +
+  scale_color_manual(values = activity_colors, na.value = "grey70")
+
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_rel_abundance,
+    y = timeseries_rna_max_rel_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = rare_common_threshold, color = "grey") +
+  geom_vline(xintercept = rare_common_threshold, color = "grey") +
+  geom_point() +
+  labs(
+    x = "Max. Rel. Abundance\nin Soil",
+    y = "Max. Rel. Abundance\nin Aquatic Time Series"
+  ) +
+  annotate("text", x = 10^(-1), y = 10^(-1), label = "RNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  coord_fixed(ratio = 1) +
+  scale_color_manual(values = activity_colors, na.value = "grey70")
+```
+
+# Notes for further cleanup
+
+The original analysis included several exploratory plotting chunks that subset taxa by row number, for example `[1:30]`, `[31:60]`, and `[401:500]`. These are retained only where useful for visual review, but they should eventually be replaced with either random sampling, named example OTUs, or scripted output to multipage PDFs.
+
+The manual activity classifications are treated here as the final classifications. The metric-based classifications are retained for comparison and reproducibility.
+
+The term `shared_taxa` is used for taxa detected in soil and also detected in aquatic RNA or DNA pools. This replaces mixed usage of `soil OTUs`, `terrestrial-derived OTUs`, and `transect soil OTUs` where the intended meaning was shared occurrence across soil and aquatic samples.
