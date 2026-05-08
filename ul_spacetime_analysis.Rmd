@@ -682,7 +682,11 @@ shared_percent_common_by_activity |>
   ) +
   scale_color_manual(values = activity_colors)
 
-ggsave("percent_of_shared_taxa_common_when_present.pdf", path = paths$figures)
+ggsave("percent_of_shared_taxa_common_when_present.pdf", 
+       path = paths$figures,
+       height = 4,
+       width = 6,
+       units = "in")
 ```
 
 ## Percent of time each shared taxon is common when present
@@ -718,7 +722,11 @@ shared_percent_time_common |>
   ) +
   scale_color_manual(values = activity_colors)
 
-ggsave("shared_taxa_percent_of_times_common_when_present.pdf", path = paths$figures)
+ggsave("shared_taxa_percent_of_times_common_when_present.pdf", 
+       path = paths$figures,
+       height = 4,
+       width = 6,
+       units = "in")
 ```
 
 # Example OTUs representing activity patterns
@@ -920,10 +928,3 @@ shared_taxa_summary |>
   scale_color_manual(values = activity_colors, na.value = "grey70")
 ```
 
-# Notes for further cleanup
-
-The original analysis included several exploratory plotting chunks that subset taxa by row number, for example `[1:30]`, `[31:60]`, and `[401:500]`. These are retained only where useful for visual review, but they should eventually be replaced with either random sampling, named example OTUs, or scripted output to multipage PDFs.
-
-The manual activity classifications are treated here as the final classifications. The metric-based classifications are retained for comparison and reproducibility.
-
-The term `shared_taxa` is used for taxa detected in soil and also detected in aquatic RNA or DNA pools. This replaces mixed usage of `soil OTUs`, `terrestrial-derived OTUs`, and `transect soil OTUs` where the intended meaning was shared occurrence across soil and aquatic samples.
