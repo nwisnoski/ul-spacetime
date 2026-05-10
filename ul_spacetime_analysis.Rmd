@@ -739,7 +739,7 @@ soil_activity_classes <- classify_activity_patterns(
   long_data = timeseries_long,
   presence_table = timeseries_rna_soil_shared_dna_presence,
   taxa = colnames(timeseries_rna_soil_shared_dna_presence),
-  persistent_cutoff = 0.90,
+  persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
@@ -768,7 +768,7 @@ soil_activity_classes_unsmoothed <- classify_activity_patterns(
   long_data = timeseries_long,
   presence_table = timeseries_rna_soil_shared_dna_presence,
   taxa = colnames(timeseries_rna_soil_shared_dna_presence),
-  persistent_cutoff = 0.90,
+  persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
@@ -903,7 +903,7 @@ aquatic_activity_classes <- classify_activity_patterns(
   long_data = timeseries_long,
   presence_table = timeseries_aquatic_rna_presence,
   taxa = colnames(timeseries_aquatic_rna_presence),
-  persistent_cutoff = 0.90,
+  persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
@@ -932,7 +932,7 @@ aquatic_activity_classes_unsmoothed <- classify_activity_patterns(
   long_data = timeseries_long,
   presence_table = timeseries_aquatic_rna_presence,
   taxa = colnames(timeseries_aquatic_rna_presence),
-  persistent_cutoff = 0.90,
+  persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
@@ -1001,15 +1001,43 @@ plot_relative_abundance_facets(timeseries_long, aquatic_unpatterned_taxa$OTU[1:m
 aquatic_persistent_abundance <- summarize_taxon_abundance(timeseries_long, aquatic_persistent_taxa$OTU, env_data)
 aquatic_seasonal_abundance <- summarize_taxon_abundance(timeseries_long, aquatic_seasonal_taxa$OTU, env_data)
 aquatic_transient_abundance <- summarize_taxon_abundance(timeseries_long, aquatic_transient_taxa$OTU, env_data)
+aquatic_unpatterned_abundance <- summarize_taxon_abundance(timeseries_long, aquatic_unpatterned_taxa$OTU, env_data)
+
 
 bind_rows(
   aquatic_persistent_abundance |> mutate(activity_pattern = "persistent"),
   aquatic_seasonal_abundance |> mutate(activity_pattern = "seasonal"),
-  aquatic_transient_abundance |> mutate(activity_pattern = "transient")
+  aquatic_transient_abundance |> mutate(activity_pattern = "transient"),
+  aquatic_unpatterned_abundance |> mutate(activity_pattern = "unpatterned")
 ) |>
   ggplot(aes(x = date, y = relative_abundance, color = activity_pattern)) +
   geom_line(alpha = 0.9, linewidth = 0.8) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
+  labs(x = "Date", y = "Relative abundance") +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+bind_rows(
+  aquatic_persistent_abundance |> mutate(activity_pattern = "persistent"),
+  aquatic_seasonal_abundance |> mutate(activity_pattern = "seasonal"),
+  aquatic_transient_abundance |> mutate(activity_pattern = "transient"),
+  aquatic_unpatterned_abundance |> mutate(activity_pattern = "unpatterned")
+) |>
+  mutate(
+  activity_pattern = factor(
+    activity_pattern,
+    levels = c(
+      "unpatterned",
+      "transient",
+      "seasonal",
+      "persistent"
+    )
+  )
+) |> 
+  ggplot(aes(x = date, y = relative_abundance, fill = activity_pattern)) +
+  geom_area(alpha = 0.9, position = "stack") +
+  scale_fill_manual(values = activity_colors, drop = FALSE) +
   labs(x = "Date", y = "Relative abundance") +
   scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
   theme_minimal() +
@@ -1309,4 +1337,57 @@ shared_taxa_summary |>
   facet_wrap(~activity_pattern, ncol = 2)
 
 ggsave(filename = "shared_taxa_soil_vs_transect_rna.pdf", path = paths$figures, width = 8, height = 8, units = "in")
+```
+
+
+## Soil versus aquatic timeseries maximum abundance
+
+```{r plot_soil_vs_timeseries_max_abundance}
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_relative_abundance,
+    y = timeseries_dna_max_relative_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = 0.001, color = "grey60") +
+  geom_vline(xintercept = 0.001, color = "grey60") +
+  geom_point(alpha = 0.35, size = 2.5, show.legend = FALSE) +
+  labs(
+    x = "Max. relative abundance\nin soil",
+    y = "Max. relative abundance\nin aquatic time series",
+    title = "Presence in lake (DNA)"
+  ) +
+  #annotate("text", x = 10^(-1), y = 10^(-1), label = "DNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_color_manual(values = activity_colors, drop = FALSE) +
+  coord_fixed(ratio = 1) +
+  theme_minimal() +
+  facet_wrap(~activity_pattern, ncol = 2)
+
+ggsave(filename = "shared_taxa_soil_vs_timeseries_dna.pdf", path = paths$figures, width = 8, height = 8, units = "in")
+
+shared_taxa_summary |>
+  ggplot(aes(
+    x = soil_max_relative_abundance,
+    y = timeseries_rna_max_relative_abundance,
+    color = activity_pattern
+  )) +
+  geom_hline(yintercept = 0.001, color = "grey60") +
+  geom_vline(xintercept = 0.001, color = "grey60") +
+  geom_point(alpha = 0.35, size = 2.5, show.legend = FALSE) +
+  labs(
+    x = "Max. relative abundance\nin soil",
+    y = "Max. relative abundance\nin aquatic time series",
+    title = "Activity in lake (RNA)"
+  ) +
+  #annotate("text", x = 10^(-1), y = 10^(-1), label = "RNA", size = 6, adj = 1) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_color_manual(values = activity_colors, drop = FALSE) +
+  coord_fixed(ratio = 1) +
+  theme_minimal() +
+  facet_wrap(~activity_pattern, ncol = 2)
+
+ggsave(filename = "shared_taxa_soil_vs_timeseries_rna.pdf", path = paths$figures, width = 8, height = 8, units = "in")
 ```
