@@ -837,6 +837,7 @@ plot_relative_abundance_facets(timeseries_long, soil_unpatterned_taxa$OTU[1:min(
 soil_persistent_abundance <- summarize_taxon_abundance(timeseries_long, soil_persistent_taxa$OTU, env_data)
 soil_seasonal_abundance <- summarize_taxon_abundance(timeseries_long, soil_seasonal_taxa$OTU, env_data)
 soil_transient_abundance <- summarize_taxon_abundance(timeseries_long, soil_transient_taxa$OTU, env_data)
+soil_unpatterned_abundance <- summarize_taxon_abundance(timeseries_long, soil_unpatterned_taxa$OTU, env_data)
 
 bind_rows(
   soil_persistent_abundance |> mutate(activity_pattern = "persistent"),
@@ -852,6 +853,38 @@ bind_rows(
 
 ggsave(
   filename = "soil_taxa_percent_contribution_all.pdf",
+  path = paths$figures,
+  width = 6,
+  height = 4.5
+)
+
+bind_rows(
+  soil_persistent_abundance |> mutate(activity_pattern = "persistent"),
+  soil_seasonal_abundance |> mutate(activity_pattern = "seasonal"),
+  soil_transient_abundance |> mutate(activity_pattern = "transient"),
+  soil_unpatterned_abundance |> mutate(activity_pattern = "unpatterned")
+) |>
+  mutate(
+  activity_pattern = factor(
+    activity_pattern,
+    levels = c(
+      "unpatterned",
+      "transient",
+      "seasonal",
+      "persistent"
+    )
+  )
+) |> 
+  ggplot(aes(x = date, y = relative_abundance * 100, 
+    fill = activity_pattern)) +
+  geom_area(alpha = 0.9, linewidth = 0.2, color = NA, position = "stack") +
+  labs(x = "", y = "Contribution of soil-shared taxa\nto active aquatic community (%)") +
+  scale_fill_manual(values = activity_colors, drop = FALSE) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+
+ggsave(
+  filename = "soil_taxa_percent_contribution_stacked.pdf",
   path = paths$figures,
   width = 6,
   height = 4.5
