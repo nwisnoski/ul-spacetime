@@ -30,3 +30,6 @@ vignettes/*.pdf
 *.Rproj
 .Rprofile
 .positai
+air.toml
+.vscode/extensions.json
+.vscode/settings.json
