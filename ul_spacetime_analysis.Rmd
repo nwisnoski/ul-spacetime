@@ -1425,6 +1425,81 @@ shared_common_when_present |>
 # )
 ```
 
+# Percent of present shared taxa that are common by activity class
+
+```{r percent_common_by_activity_class}
+percent_common_by_activity_class <- function(
+  long_data,
+  presence_lookup,
+  taxa,
+  activity_pattern
+) {
+  long_data |>
+    left_join(presence_lookup, by = c("sample_id", "OTU")) |>
+    filter(OTU %in% taxa, presence == 1) |>
+    group_by(sample_id) |>
+    summarize(
+      total_present = n(),
+      total_common = sum(abundance_type == "common"),
+      total_rare = sum(abundance_type == "rare"),
+      percent_common = total_common / total_present * 100,
+      percent_rare = total_rare / total_present * 100,
+      .groups = "drop"
+    ) |>
+    mutate(activity_pattern = activity_pattern)
+}
+
+shared_percent_common_by_activity <-
+  bind_rows(
+    percent_common_by_activity_class(
+      timeseries_long,
+      timeseries_presence_lookup,
+      soil_transient_taxa$OTU,
+      "transient"
+    ),
+    percent_common_by_activity_class(
+      timeseries_long,
+      timeseries_presence_lookup,
+      soil_seasonal_taxa$OTU,
+      "seasonal"
+    ),
+    percent_common_by_activity_class(
+      timeseries_long,
+      timeseries_presence_lookup,
+      soil_persistent_taxa$OTU,
+      "persistent"
+    )
+  )
+
+shared_percent_common_by_activity |>
+  mutate(
+    activity_pattern = factor(
+      activity_pattern,
+      levels = c("transient", "seasonal", "persistent")
+    )
+  ) |>
+  ggplot(aes(
+    x = activity_pattern,
+    y = percent_common,
+    color = activity_pattern
+  )) +
+  geom_boxplot() +
+  guides(color = "none") +
+  labs(
+    x = "Activity pattern",
+    y = "Percent of taxa\ncommon when present"
+  ) +
+  scale_color_manual(values = activity_colors, drop = FALSE)
+
+ggsave(
+  "percent_of_shared_taxa_common_when_present.pdf",
+  path = paths$figures,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+```
+
 # Percent of time each shared OTU is common when present
 
 ```{r percent_time_common_when_present}
@@ -1466,7 +1541,7 @@ common when present"
   scale_color_manual(values = activity_colors, drop = FALSE)
 
 ggsave(
-  "shared_taxa_percent_of_times_common_when_present.pdf",
+  "percent_of_time_shared_taxa_common_when_present.pdf",
   path = paths$figures,
   width = 6,
   height = 4,
