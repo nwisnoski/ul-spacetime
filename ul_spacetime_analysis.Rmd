@@ -1148,26 +1148,26 @@ aquatic_unpatterned_taxa <-
 ## Visualize classifier-derived aquatic activity groups
 
 ```{r visualize_aquatic_activity_groups}
-plot_relative_abundance_facets(
-  timeseries_long,
-  aquatic_persistent_taxa$OTU,
-  x_var = date
-)
-plot_relative_abundance_facets(
-  timeseries_long,
-  aquatic_seasonal_taxa$OTU[1:min(60, nrow(aquatic_seasonal_taxa))],
-  x_var = date
-)
-plot_relative_abundance_facets(
-  timeseries_long,
-  aquatic_transient_taxa$OTU[1:min(60, nrow(aquatic_transient_taxa))],
-  x_var = date
-)
-plot_relative_abundance_facets(
-  timeseries_long,
-  aquatic_unpatterned_taxa$OTU[1:min(60, nrow(aquatic_unpatterned_taxa))],
-  x_var = date
-)
+# plot_relative_abundance_facets(
+#   timeseries_long,
+#   aquatic_persistent_taxa$OTU,
+#   x_var = date
+# )
+# plot_relative_abundance_facets(
+#   timeseries_long,
+#   aquatic_seasonal_taxa$OTU[1:min(60, nrow(aquatic_seasonal_taxa))],
+#   x_var = date
+# )
+# plot_relative_abundance_facets(
+#   timeseries_long,
+#   aquatic_transient_taxa$OTU[1:min(60, nrow(aquatic_transient_taxa))],
+#   x_var = date
+# )
+# plot_relative_abundance_facets(
+#   timeseries_long,
+#   aquatic_unpatterned_taxa$OTU[1:min(60, nrow(aquatic_unpatterned_taxa))],
+#   x_var = date
+# )
 ```
 
 # Contribution of classifier-derived aquatic-only taxa to active community
@@ -1856,23 +1856,28 @@ ggsave(
 
 # Sankey plot of soil-derived taxa filtering and temporal fate
 
-# Soil-derived taxa filtering and temporal fate
+```{r shared_taxa_filtering_sankey}
+focal_shared_taxa <-
+  union(
+    soil_shared_dna_taxa,
+    union(
+      soil_shared_rna_taxa,
+      soil_activity_classes$OTU
+    )
+  )
 
-```{r soil_taxa_filtering_sankey}
-soil_taxa_filtering <- tibble(
-  OTU = soil_taxa
-) |>
+shared_taxa_filtering <-
+  tibble(OTU = focal_shared_taxa) |>
   mutate(
-    soil_pool = "Soil pool",
     transect_dna_status = if_else(
       OTU %in% soil_shared_dna_taxa,
-      "Detected in lake transect DNA",
-      "Not detected in lake transect DNA"
+      "Soil-aquatic\nshared taxa",
+      "Not detected\nin transect DNA"
     ),
     transect_rna_status = if_else(
       OTU %in% soil_shared_rna_taxa,
-      "Active in lake transect RNA",
-      "Not active in lake transect RNA"
+      "Active on\ntransect date",
+      "Inactive on\ntransect date"
     )
   ) |>
   left_join(
@@ -1882,68 +1887,84 @@ soil_taxa_filtering <- tibble(
   ) |>
   mutate(
     timeseries_fate = case_when(
-      is.na(activity_pattern) ~ "Not active in lake time series",
-      activity_pattern == "persistent" ~ "Persistent in lake time series",
-      activity_pattern == "seasonal" ~ "Seasonal in lake time series",
-      activity_pattern == "transient" ~ "Transient in lake time series",
-      activity_pattern == "unpatterned" ~ "Unpatterned in lake time series",
-      TRUE ~ "Not active in lake time series"
+      activity_pattern == "persistent" ~ "Persistent",
+      activity_pattern == "seasonal" ~ "Seasonal",
+      activity_pattern == "transient" ~ "Transient",
+      activity_pattern == "unpatterned" ~ "Unpatterned",
+      TRUE ~ "Never active\nin time series"
     ),
     timeseries_fate = factor(
       timeseries_fate,
       levels = c(
-        "Persistent in lake time series",
-        "Seasonal in lake time series",
-        "Transient in lake time series",
-        "Unpatterned in lake time series",
-        "Not active in lake time series"
+        "Persistent",
+        "Seasonal",
+        "Transient",
+        "Unpatterned",
+        "Never active\nin time series"
+      )
+    ),
+    transect_rna_status = factor(
+      transect_rna_status,
+      levels = c(
+        "Active on\ntransect date",
+        "Inactive on\ntransect date"
       )
     )
   )
 
 sankey_colors <- c(
-  "Persistent in lake time series" = activity_colors[["persistent"]],
-  "Seasonal in lake time series" = activity_colors[["seasonal"]],
-  "Transient in lake time series" = activity_colors[["transient"]],
-  "Unpatterned in lake time series" = activity_colors[["unpatterned"]],
-  "Not active in lake time series" = "grey85"
+  "Persistent in time series" = activity_colors[["persistent"]],
+  "Seasonal in time series" = activity_colors[["seasonal"]],
+  "Transient in time series" = activity_colors[["transient"]],
+  "Unpatterned in time series" = activity_colors[["unpatterned"]],
+  "Not active in time series" = "grey85"
 )
 
-fig_soil_taxa_filtering_sankey <-
+fig_shared_taxa_filtering_sankey <-
   ggplot(
-    soil_taxa_filtering,
+    shared_taxa_filtering,
     aes(
-      axis1 = soil_pool,
-      axis2 = transect_dna_status,
-      axis3 = transect_rna_status,
-      axis4 = timeseries_fate
+      axis1 = transect_dna_status,
+      axis2 = transect_rna_status,
+      axis3 = timeseries_fate
     )
   ) +
   geom_alluvium(
     aes(fill = timeseries_fate),
     width = 0.18,
-    alpha = 0.85
+    alpha = 0.85,
+    decreasing = FALSE
   ) +
   geom_stratum(
     width = 0.25,
     fill = "grey95",
-    color = "grey40"
+    color = "grey40",
+    decreasing = FALSE
   ) +
   geom_text(
     stat = "stratum",
     aes(label = after_stat(stratum)),
-    size = 3
+    size = 2.8,
+    decreasing = FALSE
   ) +
   scale_x_discrete(
     limits = c(
-      "Soil taxa",
-      "Lake transect DNA",
-      "Lake transect RNA",
-      "Lake time-series fate"
+      "Detected in\ntransect DNA",
+      "Active in\ntransect RNA",
+      "Time-series\nactivity fate"
     ),
     expand = c(0.08, 0.08)
   ) +
-  scale_fill_manual(values = sankey_colors, drop = FALSE) +
+  scale_fill_manual(
+    values = c(
+      "Persistent" = activity_colors[["persistent"]],
+      "Seasonal" = activity_colors[["seasonal"]],
+      "Transient" = activity_colors[["transient"]],
+      "Unpatterned" = activity_colors[["unpatterned"]],
+      "Not active" = "grey85"
+    ),
+    drop = FALSE
+  ) +
   labs(
     x = "",
     y = "Number of OTUs",
@@ -1951,25 +1972,25 @@ fig_soil_taxa_filtering_sankey <-
   ) +
   theme_minimal() +
   theme(
-    legend.position = "bottom",
+    legend.position = "right",
     panel.grid = element_blank(),
     axis.text.y = element_blank(),
     axis.ticks = element_blank()
   )
-
-fig_soil_taxa_filtering_sankey
+fig_shared_taxa_filtering_sankey
 
 ggsave(
-  filename = "soil_taxa_filtering_sankey.pdf",
-  plot = fig_soil_taxa_filtering_sankey,
+  filename = "shared_taxa_filtering_sankey.png",
+  plot = fig_shared_taxa_filtering_sankey,
   path = paths$figures,
-  width = 11,
-  height = 5.5,
-  units = "in"
+  width = 10,
+  height = 6,
+  units = "in",
+  dpi = 600
 )
 ```
 
-```{r}
+```{r compare_activity_patterns_and_richness_differences}
 filtering_counts <- tibble(
   stage = c(
     "Soil pool",
