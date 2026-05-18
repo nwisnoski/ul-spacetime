@@ -42,6 +42,7 @@ library(colorspace)
 library(ggpubr)
 library(ggtext)
 library(patchwork)
+library(ggalluvial)
 
 source("bin/mothur_tools.R")
 
@@ -1786,6 +1787,255 @@ ggsave(
   path = paths$figures,
   width = 8,
   height = 8,
+  units = "in"
+)
+```
+
+
+# DNA persistence versus RNA activity patterns
+
+```{r dna_persistence_vs_rna_activity}
+dna_persistence_classes <-
+  tibble(
+    OTU = colnames(timeseries_dna_presence),
+    dna_occupancy = colMeans(timeseries_dna_presence, na.rm = TRUE)
+  ) |>
+  filter(OTU %in% all_shared_taxa) |>
+  mutate(
+    dna_status = case_when(
+      dna_occupancy >= 0.80 ~ "Persistent in DNA",
+      dna_occupancy < 0.10 ~ "Rare in DNA",
+      TRUE ~ "Intermediate in DNA"
+    ),
+    dna_status = factor(
+      dna_status,
+      levels = c("Rare in DNA", "Intermediate in DNA", "Persistent in DNA")
+    )
+  )
+
+dna_vs_rna_activity <-
+  dna_persistence_classes |>
+  left_join(soil_activity_classes, by = "OTU") |>
+  mutate(
+    activity_pattern = factor(
+      activity_pattern,
+      levels = c("persistent", "seasonal", "transient", "unpatterned")
+    )
+  )
+
+fig_dna_vs_rna_activity <-
+  dna_vs_rna_activity |>
+  count(dna_status, activity_pattern) |>
+  ggplot(aes(x = dna_status, y = n, fill = activity_pattern)) +
+  geom_col(width = 0.75) +
+  scale_fill_manual(values = activity_colors, drop = FALSE) +
+  labs(
+    x = "DNA time-series status",
+    y = "Number of soil-shared OTUs",
+    fill = "RNA activity pattern"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 25, hjust = 1),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom"
+  )
+
+fig_dna_vs_rna_activity
+
+ggsave(
+  filename = "dna_persistence_vs_rna_activity_patterns.pdf",
+  plot = fig_dna_vs_rna_activity,
+  path = paths$figures,
+  width = 6,
+  height = 4,
+  units = "in"
+)
+```
+
+# Sankey plot of soil-derived taxa filtering and temporal fate
+
+# Soil-derived taxa filtering and temporal fate
+
+```{r soil_taxa_filtering_sankey}
+soil_taxa_filtering <- tibble(
+  OTU = soil_taxa
+) |>
+  mutate(
+    soil_pool = "Soil pool",
+    transect_dna_status = if_else(
+      OTU %in% soil_shared_dna_taxa,
+      "Detected in lake transect DNA",
+      "Not detected in lake transect DNA"
+    ),
+    transect_rna_status = if_else(
+      OTU %in% soil_shared_rna_taxa,
+      "Active in lake transect RNA",
+      "Not active in lake transect RNA"
+    )
+  ) |>
+  left_join(
+    soil_activity_classes |>
+      select(OTU, activity_pattern),
+    by = "OTU"
+  ) |>
+  mutate(
+    timeseries_fate = case_when(
+      is.na(activity_pattern) ~ "Not active in lake time series",
+      activity_pattern == "persistent" ~ "Persistent in lake time series",
+      activity_pattern == "seasonal" ~ "Seasonal in lake time series",
+      activity_pattern == "transient" ~ "Transient in lake time series",
+      activity_pattern == "unpatterned" ~ "Unpatterned in lake time series",
+      TRUE ~ "Not active in lake time series"
+    ),
+    timeseries_fate = factor(
+      timeseries_fate,
+      levels = c(
+        "Persistent in lake time series",
+        "Seasonal in lake time series",
+        "Transient in lake time series",
+        "Unpatterned in lake time series",
+        "Not active in lake time series"
+      )
+    )
+  )
+
+sankey_colors <- c(
+  "Persistent in lake time series" = activity_colors[["persistent"]],
+  "Seasonal in lake time series" = activity_colors[["seasonal"]],
+  "Transient in lake time series" = activity_colors[["transient"]],
+  "Unpatterned in lake time series" = activity_colors[["unpatterned"]],
+  "Not active in lake time series" = "grey85"
+)
+
+fig_soil_taxa_filtering_sankey <-
+  ggplot(
+    soil_taxa_filtering,
+    aes(
+      axis1 = soil_pool,
+      axis2 = transect_dna_status,
+      axis3 = transect_rna_status,
+      axis4 = timeseries_fate
+    )
+  ) +
+  geom_alluvium(
+    aes(fill = timeseries_fate),
+    width = 0.18,
+    alpha = 0.85
+  ) +
+  geom_stratum(
+    width = 0.25,
+    fill = "grey95",
+    color = "grey40"
+  ) +
+  geom_text(
+    stat = "stratum",
+    aes(label = after_stat(stratum)),
+    size = 3
+  ) +
+  scale_x_discrete(
+    limits = c(
+      "Soil taxa",
+      "Lake transect DNA",
+      "Lake transect RNA",
+      "Lake time-series fate"
+    ),
+    expand = c(0.08, 0.08)
+  ) +
+  scale_fill_manual(values = sankey_colors, drop = FALSE) +
+  labs(
+    x = "",
+    y = "Number of OTUs",
+    fill = "Time-series fate"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    panel.grid = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+fig_soil_taxa_filtering_sankey
+
+ggsave(
+  filename = "soil_taxa_filtering_sankey.pdf",
+  plot = fig_soil_taxa_filtering_sankey,
+  path = paths$figures,
+  width = 11,
+  height = 5.5,
+  units = "in"
+)
+```
+
+```{r}
+filtering_counts <- tibble(
+  stage = c(
+    "Soil pool",
+    "Detected in\nlake transect DNA",
+    "Active in\nlake transect RNA",
+    "Active in\ntime series"
+  ),
+  n_taxa = c(
+    length(soil_taxa),
+    length(soil_shared_dna_taxa),
+    length(soil_shared_rna_taxa),
+    nrow(soil_activity_classes)
+  )
+)
+
+fig_filtering_counts <-
+  filtering_counts |>
+  mutate(stage = factor(stage, levels = stage)) |>
+  ggplot(aes(x = stage, y = n_taxa)) +
+  geom_col(fill = "grey55", width = 0.7) +
+  geom_text(aes(label = n_taxa), vjust = -0.4, size = 4) +
+  labs(
+    x = "",
+    y = "Number of OTUs"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+fig_timeseries_fates <-
+  soil_activity_classes |>
+  count(activity_pattern) |>
+  mutate(
+    activity_pattern = factor(
+      activity_pattern,
+      levels = c("persistent", "seasonal", "transient", "unpatterned")
+    )
+  ) |>
+  ggplot(aes(x = activity_pattern, y = n, fill = activity_pattern)) +
+  geom_col(width = 0.7, show.legend = FALSE) +
+  geom_text(aes(label = n), vjust = -0.4, size = 4) +
+  scale_fill_manual(values = activity_colors, drop = FALSE) +
+  labs(
+    x = "RNA activity pattern in lake time series",
+    y = "Number of OTUs"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+fig_filtering_pipeline <-
+  fig_filtering_counts / fig_timeseries_fates +
+  plot_annotation(tag_levels = "A")
+
+fig_filtering_pipeline
+
+ggsave(
+  filename = "soil_taxa_filtering_pipeline.pdf",
+  plot = fig_filtering_pipeline,
+  path = paths$figures,
+  width = 7,
+  height = 9,
   units = "in"
 )
 ```
