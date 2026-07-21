@@ -624,22 +624,15 @@ classify_activity_patterns <- function(
           seasonal_max_single_year_peak_fraction &
         n_peak_months >= seasonal_min_peak_months &
         n_peak_months <= seasonal_max_peak_months &
-        (seasonal_concentration >= seasonal_concentration_cutoff |
-          seasonal_peak_to_background >= seasonal_peak_to_background_cutoff |
-          seasonal_relative_amplitude >= seasonal_relative_amplitude_cutoff |
-          seasonal_abundance_peak_to_background >=
-            seasonal_abundance_peak_to_background_cutoff |
-          seasonal_abundance_relative_amplitude >=
-            seasonal_abundance_relative_amplitude_cutoff |
-          annual_peak_doy_concentration >=
-            seasonal_peak_doy_concentration_cutoff |
-          (seasonal_harmonic_r2 >= seasonal_harmonic_r2_cutoff &
-            seasonal_harmonic_amplitude >= seasonal_harmonic_amplitude_cutoff)),
+        seasonal_abundance_relative_amplitude >=
+          seasonal_abundance_relative_amplitude_cutoff,
+
       seasonal_temporal_support = presence_frequency >=
         seasonal_min_presence_frequency &
         (max_active_run >= seasonal_min_max_run |
           peak_window_active_samples >=
             seasonal_min_peak_window_active_samples),
+
       seasonal = candidate_seasonal & seasonal_temporal_support,
       episodic_transient = !persistent &
         !seasonal &
@@ -2046,7 +2039,8 @@ fig_timeseries_fates <-
   )
 
 fig_filtering_pipeline <-
-  fig_filtering_counts / fig_timeseries_fates +
+  fig_filtering_counts /
+  fig_timeseries_fates +
   plot_annotation(tag_levels = "A")
 
 fig_filtering_pipeline
