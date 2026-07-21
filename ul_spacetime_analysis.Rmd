@@ -459,9 +459,9 @@ classify_activity_patterns <- function(
       peak_months = paste(month[peak_month], collapse = ","),
       max_monthly_abundance = max(mean_smoothed_abundance, na.rm = TRUE),
       median_monthly_abundance = median(mean_smoothed_abundance, na.rm = TRUE),
-      seasonal_abundance_relative_amplitude =
-        (max_monthly_abundance - median_monthly_abundance) /
-          (max_monthly_abundance + 1e-12),
+      seasonal_abundance_relative_amplitude = (max_monthly_abundance -
+        median_monthly_abundance) /
+        (max_monthly_abundance + 1e-12),
       seasonal_abundance_peak_to_background = max_monthly_abundance /
         (median_monthly_abundance + 1e-12),
       .groups = "drop"
@@ -513,8 +513,7 @@ classify_activity_patterns <- function(
         seasonal_abundance_relative_amplitude >=
           seasonal_abundance_relative_amplitude_cutoff,
 
-      seasonal_temporal_support = occupancy >=
-        seasonal_min_presence_frequency &
+      seasonal_temporal_support = occupancy >= seasonal_min_presence_frequency &
         (max_active_run >= seasonal_min_max_run |
           peak_window_active_samples >=
             seasonal_min_peak_window_active_samples),
@@ -1350,12 +1349,12 @@ shared_percent_time_common <-
   ) |>
   left_join(soil_activity_classes, by = "OTU")
 
-shared_percent_time_common |>
-  filter(activity_pattern != "unpatterned") |>
+fig_shared_percent_time_common <- shared_percent_time_common |>
+  #filter(activity_pattern != "unpatterned") |>
   mutate(
     activity_pattern = factor(
       activity_pattern,
-      levels = c("transient", "seasonal", "persistent")
+      levels = c("persistent", "seasonal", "transient", "unpatterned")
     )
   ) |>
   ggplot(aes(
@@ -1374,6 +1373,7 @@ common when present"
 
 ggsave(
   "percent_of_time_shared_taxa_common_when_present.pdf",
+  plot = fig_shared_percent_time_common,
   path = paths$figures,
   width = 6,
   height = 4,
@@ -1843,11 +1843,11 @@ fig_filtering_counts <-
   ggplot(aes(x = stage, y = n_taxa)) +
   geom_col(fill = "grey55", width = 0.7) +
   geom_text(aes(label = n_taxa), vjust = -0.4, size = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(
     x = "",
     y = "Number of OTUs"
   ) +
-  theme_minimal() +
   theme(
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank()
@@ -1866,11 +1866,11 @@ fig_timeseries_fates <-
   geom_col(width = 0.7, show.legend = FALSE) +
   geom_text(aes(label = n), vjust = -0.4, size = 4) +
   scale_fill_manual(values = activity_colors, drop = FALSE) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
   labs(
-    x = "RNA activity pattern in lake time series",
+    x = "Activity pattern",
     y = "Number of OTUs"
   ) +
-  theme_minimal() +
   theme(
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank()
@@ -1887,8 +1887,24 @@ ggsave(
   filename = "soil_taxa_filtering_pipeline.pdf",
   plot = fig_filtering_pipeline,
   path = paths$figures,
-  width = 7,
-  height = 9,
+  width = 8,
+  height = 14,
+  units = "in"
+)
+
+fig_classifications_panels <-
+  #  fig_filtering_counts +
+  fig_timeseries_fates /
+  fig_shared_percent_time_common +
+  plot_annotation(tag_levels = "A")
+fig_classifications_panels
+
+ggsave(
+  filename = "soil_taxa_classifications.pdf",
+  plot = fig_classifications_panels,
+  path = paths$figures,
+  width = 8,
+  height = 10,
   units = "in"
 )
 ```
