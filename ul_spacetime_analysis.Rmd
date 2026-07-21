@@ -318,28 +318,20 @@ classify_activity_patterns <- function(
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 6,
-  seasonal_concentration_cutoff = 0.35,
   seasonal_recurrence_cutoff = 0.40,
   seasonal_min_presence_frequency = 0.05,
   seasonal_min_max_run = 2,
   seasonal_min_peak_window_active_samples = 4,
-  seasonal_peak_to_background_cutoff = 3,
-  seasonal_relative_amplitude_cutoff = 0.50,
-  seasonal_abundance_peak_to_background_cutoff = 3,
   seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_peak_doy_concentration_cutoff = 0.60,
-  seasonal_min_peak_years = 2,
   seasonal_max_single_year_peak_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
-  seasonal_harmonic_r2_cutoff = 0.10,
-  seasonal_harmonic_amplitude_cutoff = 0.25,
-  smooth_activity = TRUE,
+  smooth_abundance = TRUE,
   smooth_window = 3,
   abundance_floor = 0
 ) {
   # Classifies OTU activity patterns using occupancy, recurrence, run length,
-  # and seasonal concentration.
+  # peak timing, and monthly abundance amplitude.
   #
   # Definitions:
   # - persistent: active in most samples.
@@ -348,8 +340,8 @@ classify_activity_patterns <- function(
   #   in a limited part of the annual cycle.
   # - unpatterned: intermediate occupancy without consistent seasonal structure.
   #
-  # Smoothing is optional and conservative. It is used only to stabilize the
-  # seasonal signal, not to redefine whether a taxon was observed in a sample.
+  # Smoothing is optional and conservative. It stabilizes abundance-based
+  # seasonal metrics but does not redefine whether a taxon was observed.
 
   stopifnot(all(taxa %in% colnames(presence_table)))
 
@@ -361,9 +353,7 @@ classify_activity_patterns <- function(
     arrange({{ date_col }}) |>
     mutate(
       year = lubridate::year({{ date_col }}),
-      month = lubridate::month({{ date_col }}),
-      day_of_year = lubridate::yday({{ date_col }}),
-      theta = 2 * pi * (day_of_year - 1) / 365.25
+      month = lubridate::month({{ date_col }})
     )
 
   if (nrow(metadata) != nrow(presence_table)) {
@@ -399,17 +389,7 @@ classify_activity_patterns <- function(
     arrange(OTU, {{ date_col }}) |>
     group_by(OTU) |>
     mutate(
-      active_smoothed = if (smooth_activity) {
-        as.numeric(stats::filter(
-          active_observed,
-          rep(1 / smooth_window, smooth_window),
-          sides = 2
-        ))
-      } else {
-        as.numeric(active_observed)
-      },
-      active_smoothed = coalesce(active_smoothed, as.numeric(active_observed)),
-      abundance_smoothed = if (smooth_activity) {
+      abundance_smoothed = if (smooth_abundance) {
         as.numeric(stats::filter(
           abundance,
           rep(1 / smooth_window, smooth_window),
@@ -438,7 +418,6 @@ classify_activity_patterns <- function(
     group_by(OTU) |>
     summarize(
       max_active_run = max(run_length, na.rm = TRUE),
-      mean_active_run = mean(run_length, na.rm = TRUE),
       .groups = "drop"
     )
 
@@ -446,7 +425,6 @@ classify_activity_patterns <- function(
     taxon_time_series |>
     group_by(OTU, year) |>
     summarize(
-      annual_occupancy = mean(active_observed, na.rm = TRUE),
       detected_this_year = any(active_observed),
       .groups = "drop"
     ) |>
@@ -455,8 +433,6 @@ classify_activity_patterns <- function(
       years_detected = sum(detected_this_year),
       years_sampled = n(),
       annual_recurrence = years_detected / years_sampled,
-      min_annual_occupancy = min(annual_occupancy, na.rm = TRUE),
-      max_annual_occupancy = max(annual_occupancy, na.rm = TRUE),
       .groups = "drop"
     )
 
@@ -465,14 +441,11 @@ classify_activity_patterns <- function(
     group_by(OTU, month) |>
     summarize(
       monthly_occupancy = mean(active_observed, na.rm = TRUE),
-      monthly_smoothed_activity = mean(active_smoothed, na.rm = TRUE),
-      mean_abundance = mean(abundance, na.rm = TRUE),
       mean_smoothed_abundance = mean(abundance_smoothed, na.rm = TRUE),
       .groups = "drop"
     ) |>
     group_by(OTU) |>
     mutate(
-      max_monthly_activity = max(monthly_smoothed_activity, na.rm = TRUE),
       max_monthly_abundance = max(mean_smoothed_abundance, na.rm = TRUE),
       peak_month = mean_smoothed_abundance >=
         max_monthly_abundance * seasonal_recurrence_cutoff
@@ -484,45 +457,13 @@ classify_activity_patterns <- function(
         na.rm = TRUE
       ),
       peak_months = paste(month[peak_month], collapse = ","),
-      max_monthly_activity = max(monthly_smoothed_activity, na.rm = TRUE),
-      median_monthly_activity = median(monthly_smoothed_activity, na.rm = TRUE),
-      min_monthly_activity = min(monthly_smoothed_activity, na.rm = TRUE),
-      seasonal_amplitude = max_monthly_activity - median_monthly_activity,
-      seasonal_relative_amplitude = seasonal_amplitude /
-        (max_monthly_activity + 1e-12),
-      seasonal_peak_to_background = max_monthly_activity /
-        (median_monthly_activity + 1e-12),
       max_monthly_abundance = max(mean_smoothed_abundance, na.rm = TRUE),
       median_monthly_abundance = median(mean_smoothed_abundance, na.rm = TRUE),
-      seasonal_abundance_amplitude = max_monthly_abundance -
-        median_monthly_abundance,
-      seasonal_abundance_relative_amplitude = seasonal_abundance_amplitude /
-        (max_monthly_abundance + 1e-12),
+      seasonal_abundance_relative_amplitude =
+        (max_monthly_abundance - median_monthly_abundance) /
+          (max_monthly_abundance + 1e-12),
       seasonal_abundance_peak_to_background = max_monthly_abundance /
         (median_monthly_abundance + 1e-12),
-      .groups = "drop"
-    )
-
-  circular_summary <-
-    taxon_time_series |>
-    filter(active_observed) |>
-    group_by(OTU) |>
-    summarize(
-      seasonal_x = weighted.mean(
-        cos(theta),
-        w = pmax(abundance_smoothed, 0),
-        na.rm = TRUE
-      ),
-      seasonal_y = weighted.mean(
-        sin(theta),
-        w = pmax(abundance_smoothed, 0),
-        na.rm = TRUE
-      ),
-      seasonal_concentration = sqrt(seasonal_x^2 + seasonal_y^2),
-      seasonal_peak_doy = ((atan2(seasonal_y, seasonal_x) %% (2 * pi)) /
-        (2 * pi)) *
-        365.25 +
-        1,
       .groups = "drop"
     )
 
@@ -530,19 +471,12 @@ classify_activity_patterns <- function(
     taxon_time_series |>
     filter(active_observed) |>
     group_by(OTU, year) |>
-    mutate(annual_total_abundance = sum(abundance_smoothed, na.rm = TRUE)) |>
-    slice_max(order_by = abundance_smoothed, n = 1, with_ties = FALSE) |>
-    ungroup() |>
+    summarize(
+      annual_total_abundance = sum(abundance_smoothed, na.rm = TRUE),
+      .groups = "drop"
+    ) |>
     group_by(OTU) |>
     summarize(
-      annual_peak_years = n(),
-      annual_peak_x = mean(cos(theta), na.rm = TRUE),
-      annual_peak_y = mean(sin(theta), na.rm = TRUE),
-      annual_peak_doy_concentration = sqrt(annual_peak_x^2 + annual_peak_y^2),
-      annual_peak_doy = ((atan2(annual_peak_y, annual_peak_x) %% (2 * pi)) /
-        (2 * pi)) *
-        365.25 +
-        1,
       max_single_year_peak_fraction = max(
         annual_total_abundance,
         na.rm = TRUE
@@ -551,75 +485,27 @@ classify_activity_patterns <- function(
       .groups = "drop"
     )
 
-  harmonic_summary <-
-    taxon_time_series |>
-    group_by(OTU) |>
-    group_modify(
-      ~ {
-        y <- .x$abundance_smoothed
-        y_scaled <- y / (max(y, na.rm = TRUE) + 1e-12)
-
-        if (sum(is.finite(y_scaled)) < 10 || max(y_scaled, na.rm = TRUE) <= 0) {
-          return(tibble(
-            seasonal_harmonic_r2 = 0,
-            seasonal_harmonic_amplitude = 0
-          ))
-        }
-
-        fit <- lm(y_scaled ~ sin(theta) + cos(theta), data = .x)
-        fit_summary <- summary(fit)
-        coefs <- coef(fit)
-
-        tibble(
-          seasonal_harmonic_r2 = fit_summary$r.squared,
-          seasonal_harmonic_amplitude = sqrt(
-            coefs[["sin(theta)"]]^2 + coefs[["cos(theta)"]]^2
-          )
-        )
-      }
-    ) |>
-    ungroup()
-
   activity_summary <-
     taxon_time_series |>
     group_by(OTU) |>
     summarize(
       occupancy = mean(active_observed, na.rm = TRUE),
-      presence_frequency = mean(active_observed, na.rm = TRUE),
-      active_sample_count = sum(active_observed, na.rm = TRUE),
-      smoothed_occupancy = mean(active_smoothed, na.rm = TRUE),
-      mean_abundance_when_active = mean(
-        abundance[active_observed],
-        na.rm = TRUE
-      ),
       .groups = "drop"
     ) |>
     left_join(run_summary, by = "OTU") |>
     left_join(annual_summary, by = "OTU") |>
     left_join(month_summary, by = "OTU") |>
-    left_join(circular_summary, by = "OTU") |>
     left_join(annual_peak_summary, by = "OTU") |>
-    left_join(harmonic_summary, by = "OTU") |>
     mutate(
       max_active_run = replace_na(max_active_run, 0),
-      mean_active_run = replace_na(mean_active_run, 0),
-      seasonal_concentration = replace_na(seasonal_concentration, 0),
-      annual_peak_doy_concentration = replace_na(
-        annual_peak_doy_concentration,
-        0
-      ),
-      annual_peak_years = replace_na(annual_peak_years, 0),
       max_single_year_peak_fraction = replace_na(
         max_single_year_peak_fraction,
         1
       ),
-      seasonal_harmonic_r2 = replace_na(seasonal_harmonic_r2, 0),
-      seasonal_harmonic_amplitude = replace_na(seasonal_harmonic_amplitude, 0),
       persistent = occupancy >= persistent_cutoff,
       candidate_seasonal = !persistent &
         years_detected >= seasonal_min_years &
         annual_recurrence >= seasonal_recurrence_cutoff &
-        annual_peak_years >= seasonal_min_peak_years &
         max_single_year_peak_fraction <=
           seasonal_max_single_year_peak_fraction &
         n_peak_months >= seasonal_min_peak_months &
@@ -627,7 +513,7 @@ classify_activity_patterns <- function(
         seasonal_abundance_relative_amplitude >=
           seasonal_abundance_relative_amplitude_cutoff,
 
-      seasonal_temporal_support = presence_frequency >=
+      seasonal_temporal_support = occupancy >=
         seasonal_min_presence_frequency &
         (max_active_run >= seasonal_min_max_run |
           peak_window_active_samples >=
@@ -656,32 +542,16 @@ classify_activity_patterns <- function(
       OTU,
       activity_pattern,
       occupancy,
-      presence_frequency,
-      active_sample_count,
-      smoothed_occupancy,
       annual_recurrence,
       years_detected,
       max_active_run,
-      mean_active_run,
       n_peak_months,
       peak_window_active_samples,
       peak_months,
-      seasonal_concentration,
-      seasonal_peak_doy,
-      seasonal_amplitude,
-      seasonal_relative_amplitude,
-      seasonal_peak_to_background,
-      seasonal_abundance_amplitude,
       seasonal_abundance_relative_amplitude,
       seasonal_abundance_peak_to_background,
-      annual_peak_years,
-      annual_peak_doy_concentration,
-      annual_peak_doy,
       max_single_year_peak_fraction,
-      seasonal_harmonic_r2,
-      seasonal_harmonic_amplitude,
-      episodic_transient,
-      mean_abundance_when_active
+      episodic_transient
     )
 
   activity_summary
@@ -852,23 +722,15 @@ soil_activity_classes <- classify_activity_patterns(
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_concentration_cutoff = 0.50,
   seasonal_recurrence_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
   seasonal_min_max_run = 2,
   seasonal_min_peak_window_active_samples = 4,
-  seasonal_peak_to_background_cutoff = 3,
-  seasonal_relative_amplitude_cutoff = 0.50,
-  seasonal_abundance_peak_to_background_cutoff = 3,
   seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_peak_doy_concentration_cutoff = 0.60,
-  seasonal_min_peak_years = 2,
   seasonal_max_single_year_peak_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
-  seasonal_harmonic_r2_cutoff = 0.10,
-  seasonal_harmonic_amplitude_cutoff = 0.25,
-  smooth_activity = TRUE,
+  smooth_abundance = TRUE,
   smooth_window = 3
 )
 
@@ -881,23 +743,15 @@ soil_activity_classes_unsmoothed <- classify_activity_patterns(
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_concentration_cutoff = 0.50,
   seasonal_recurrence_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
   seasonal_min_max_run = 2,
   seasonal_min_peak_window_active_samples = 4,
-  seasonal_peak_to_background_cutoff = 3,
-  seasonal_relative_amplitude_cutoff = 0.50,
-  seasonal_abundance_peak_to_background_cutoff = 3,
   seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_peak_doy_concentration_cutoff = 0.60,
-  seasonal_min_peak_years = 2,
   seasonal_max_single_year_peak_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
-  seasonal_harmonic_r2_cutoff = 0.10,
-  seasonal_harmonic_amplitude_cutoff = 0.25,
-  smooth_activity = FALSE
+  smooth_abundance = FALSE
 )
 
 soil_activity_classes |> count(activity_pattern)
@@ -1059,23 +913,15 @@ aquatic_activity_classes <- classify_activity_patterns(
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_concentration_cutoff = 0.50,
   seasonal_recurrence_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
   seasonal_min_max_run = 2,
   seasonal_min_peak_window_active_samples = 4,
-  seasonal_peak_to_background_cutoff = 3,
-  seasonal_relative_amplitude_cutoff = 0.50,
-  seasonal_abundance_peak_to_background_cutoff = 3,
   seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_peak_doy_concentration_cutoff = 0.60,
-  seasonal_min_peak_years = 2,
   seasonal_max_single_year_peak_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
-  seasonal_harmonic_r2_cutoff = 0.10,
-  seasonal_harmonic_amplitude_cutoff = 0.25,
-  smooth_activity = TRUE,
+  smooth_abundance = TRUE,
   smooth_window = 3
 )
 
@@ -1088,23 +934,15 @@ aquatic_activity_classes_unsmoothed <- classify_activity_patterns(
   seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_concentration_cutoff = 0.50,
   seasonal_recurrence_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
   seasonal_min_max_run = 2,
   seasonal_min_peak_window_active_samples = 4,
-  seasonal_peak_to_background_cutoff = 3,
-  seasonal_relative_amplitude_cutoff = 0.50,
-  seasonal_abundance_peak_to_background_cutoff = 3,
   seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_peak_doy_concentration_cutoff = 0.60,
-  seasonal_min_peak_years = 2,
   seasonal_max_single_year_peak_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
-  seasonal_harmonic_r2_cutoff = 0.10,
-  seasonal_harmonic_amplitude_cutoff = 0.25,
-  smooth_activity = FALSE
+  smooth_abundance = FALSE
 )
 
 aquatic_activity_classes |> count(activity_pattern)
