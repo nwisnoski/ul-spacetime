@@ -43,6 +43,8 @@ library(ggpubr)
 library(ggtext)
 library(patchwork)
 library(ggalluvial)
+library(nlme)
+library(glmmTMB)
 
 source("bin/mothur_tools.R")
 
@@ -1133,6 +1135,170 @@ ggsave(
 )
 ```
 
+
+```{r quantify_contributions}
+activity_levels <- c(
+  "persistent",
+  "seasonal",
+  "transient",
+  "unpatterned"
+)
+
+activity_class_contributions <- bind_rows(
+  aquatic_persistent_abundance |>
+    mutate(origin = "aquatic_only", activity_pattern = "persistent"),
+  aquatic_seasonal_abundance |>
+    mutate(origin = "aquatic_only", activity_pattern = "seasonal"),
+  aquatic_transient_abundance |>
+    mutate(origin = "aquatic_only", activity_pattern = "transient"),
+  aquatic_unpatterned_abundance |>
+    mutate(origin = "aquatic_only", activity_pattern = "unpatterned"),
+
+  soil_persistent_abundance |>
+    mutate(origin = "soil_associated", activity_pattern = "persistent"),
+  soil_seasonal_abundance |>
+    mutate(origin = "soil_associated", activity_pattern = "seasonal"),
+  soil_transient_abundance |>
+    mutate(origin = "soil_associated", activity_pattern = "transient"),
+  soil_unpatterned_abundance |>
+    mutate(origin = "soil_associated", activity_pattern = "unpatterned")
+) |>
+  select(
+    sample_id,
+    date,
+    origin,
+    activity_pattern,
+    relative_abundance
+  ) |>
+  complete(
+    nesting(sample_id, date),
+    origin,
+    activity_pattern = activity_levels,
+    fill = list(relative_abundance = 0)
+  )
+
+activity_class_hill <- activity_class_contributions |>
+  group_by(sample_id, date, origin) |>
+  mutate(
+    total_origin_abundance = sum(relative_abundance),
+    class_share = if_else(
+      total_origin_abundance > 0,
+      relative_abundance / total_origin_abundance,
+      NA_real_
+    )
+  ) |>
+  filter(total_origin_abundance > 0) |>
+  summarize(
+    total_origin_abundance = first(total_origin_abundance),
+    shannon = -sum(
+      if_else(
+        class_share > 0,
+        class_share * log(class_share),
+        0
+      )
+    ),
+    .groups = "drop"
+  ) |>
+  mutate(
+    effective_classes = exp(shannon)
+  )
+
+activity_class_hill |>
+  group_by(origin) |>
+  summarize(
+    mean_total_abund = mean(total_origin_abundance),
+    sd_total_abund = sd(total_origin_abundance)
+  )
+
+hill_summary <- activity_class_hill |>
+  group_by(origin) |>
+  summarize(
+    mean_effective_classes = mean(effective_classes),
+    sd_effective_classes = sd(effective_classes),
+    median_effective_classes = median(effective_classes),
+    q25 = quantile(effective_classes, 0.25),
+    q75 = quantile(effective_classes, 0.75),
+    .groups = "drop"
+  )
+
+hill_summary
+
+hill_difference <- activity_class_hill |>
+  select(
+    sample_id,
+    date,
+    origin,
+    effective_classes
+  ) |>
+  pivot_wider(
+    names_from = origin,
+    values_from = effective_classes
+  ) |>
+  drop_na(
+    aquatic_only,
+    soil_associated
+  ) |>
+  arrange(date) |>
+  mutate(
+    delta_effective_classes = aquatic_only - soil_associated,
+
+    elapsed_days = as.numeric(date - min(date))
+  )
+
+hill_difference |>
+  summarize(
+    mean_difference = mean(delta_effective_classes),
+    median_difference = median(delta_effective_classes),
+    proportion_aquatic_more_even = mean(delta_effective_classes > 0),
+    n_dates = n()
+  )
+
+hill_ar1 <- nlme::gls(
+  delta_effective_classes ~ 1,
+  data = hill_difference,
+  correlation = nlme::corCAR1(
+    form = ~elapsed_days
+  ),
+  method = "REML"
+)
+
+summary(hill_ar1)
+intervals(hill_ar1)
+
+hill_ar1_ci <- intervals(hill_ar1)$coef
+
+hill_effect <- tibble(
+  estimate = unname(coef(hill_ar1)[["(Intercept)"]]),
+  lower_95 = hill_ar1_ci["(Intercept)", "lower"],
+  upper_95 = hill_ar1_ci["(Intercept)", "upper"],
+  p_value = summary(hill_ar1)$tTable[
+    "(Intercept)",
+    "p-value"
+  ]
+)
+
+hill_effect
+
+hill_difference |>
+  mutate(
+    normalized_residual = residuals(hill_ar1, type = "normalized")
+  ) |>
+  arrange(normalized_residual) |>
+  select(
+    date,
+    aquatic_only,
+    soil_associated,
+    delta_effective_classes,
+    normalized_residual
+  ) |>
+  slice_head(n = 5)
+
+nlme::ACF(
+  hill_ar1,
+  resType = "normalized"
+)
+```
+
 # Rare/common status in the time series
 
 ```{r classify_time_series_abundance_type}
@@ -1379,6 +1545,74 @@ ggsave(
   height = 4,
   units = "in"
 )
+```
+
+```{r quantify_common_among_classes}
+# First, build a beta-binomial regression model with common = success, rare = fail
+commonness_model <- glmmTMB::glmmTMB(
+  cbind(total_common, total_rare) ~ activity_pattern,
+  family = glmmTMB::betabinomial(link = "logit"),
+  data = shared_percent_time_common |>
+    mutate(
+      activity_pattern = factor(
+        activity_pattern,
+        levels = c(
+          "persistent",
+          "seasonal",
+          "transient",
+          "unpatterned"
+        )
+      )
+    )
+)
+
+# Overall activity-class effect compared with null (intercept only model)
+commonness_null <- update(
+  commonness_model,
+  . ~ 1
+)
+
+anova(
+  commonness_null,
+  commonness_model
+)
+# likelihood ratio test -> p < 2.2e16, so groups differ
+
+# Estimated probability of being common when detected
+commonness_emm <- emmeans::emmeans(
+  commonness_model,
+  ~activity_pattern
+)
+
+# backtransform marginal mean predictions to class probabilities
+summary(
+  commonness_emm,
+  type = "response",
+  infer = TRUE
+)
+# so prob persistent taxa become common =~ 0.76 vs. transient = 0.03
+
+# Tukey-adjusted pairwise odds ratios to compare among groups
+pairs(
+  commonness_emm,
+  adjust = "tukey",
+  type = "response"
+)
+
+# all pairs differ, except seasonal and unpatterned
+
+# Pairwise differences in estimated probabilities
+commonness_probability <- emmeans::regrid(
+  commonness_emm,
+  transform = "response"
+)
+
+pairs(
+  commonness_probability,
+  adjust = "tukey"
+)
+
+# so on the percentage scale, e.g., persistent taxa have a 73 percentage point higher chance of becoming common than transient taxa on average.
 ```
 
 # Example OTUs representing activity patterns
