@@ -317,29 +317,26 @@ classify_activity_patterns <- function(
   abundance_col = relative_abundance,
   persistent_cutoff = 0.90,
   transient_cutoff = 0.10,
-  seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 6,
-  seasonal_recurrence_cutoff = 0.40,
+  seasonal_peak_relative_abundance_cutoff = 0.40,
   seasonal_min_presence_frequency = 0.05,
-  seasonal_min_max_run = 2,
-  seasonal_min_peak_window_active_samples = 4,
-  seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_max_single_year_peak_fraction = 0.75,
+  seasonal_min_peak_window_active_samples = 3,
+  seasonal_max_single_year_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
   smooth_abundance = TRUE,
   smooth_window = 3,
   abundance_floor = 0
 ) {
-  # Classifies OTU activity patterns using occupancy, recurrence, run length,
-  # peak timing, and monthly abundance amplitude.
+  # Classifies OTU activity patterns using occupancy, peak timing, support
+  # within the peak window, and concentration of activity among years.
   #
   # Definitions:
   # - persistent: active in most samples.
   # - transient: active in few samples.
-  # - seasonal: intermediate occupancy, recurring across years, and concentrated
-  #   in a limited part of the annual cycle.
+  # - seasonal: nonpersistent, sufficiently observed, concentrated in a limited
+  #   part of the annual cycle, and not dominated by a single year.
   # - unpatterned: intermediate occupancy without consistent seasonal structure.
   #
   # Smoothing is optional and conservative. It stabilizes abundance-based
@@ -404,45 +401,11 @@ classify_activity_patterns <- function(
     ) |>
     ungroup()
 
-  run_summary <-
-    taxon_time_series |>
-    arrange(OTU, {{ date_col }}) |>
-    group_by(OTU) |>
-    mutate(
-      run_id = cumsum(
-        active_observed !=
-          lag(active_observed, default = first(active_observed))
-      )
-    ) |>
-    group_by(OTU, run_id, active_observed) |>
-    summarize(run_length = n(), .groups = "drop") |>
-    filter(active_observed) |>
-    group_by(OTU) |>
-    summarize(
-      max_active_run = max(run_length, na.rm = TRUE),
-      .groups = "drop"
-    )
-
-  annual_summary <-
-    taxon_time_series |>
-    group_by(OTU, year) |>
-    summarize(
-      detected_this_year = any(active_observed),
-      .groups = "drop"
-    ) |>
-    group_by(OTU) |>
-    summarize(
-      years_detected = sum(detected_this_year),
-      years_sampled = n(),
-      annual_recurrence = years_detected / years_sampled,
-      .groups = "drop"
-    )
-
   month_summary <-
     taxon_time_series |>
     group_by(OTU, month) |>
     summarize(
-      monthly_occupancy = mean(active_observed, na.rm = TRUE),
+      monthly_active_samples = sum(active_observed, na.rm = TRUE),
       mean_smoothed_abundance = mean(abundance_smoothed, na.rm = TRUE),
       .groups = "drop"
     ) |>
@@ -450,26 +413,23 @@ classify_activity_patterns <- function(
     mutate(
       max_monthly_abundance = max(mean_smoothed_abundance, na.rm = TRUE),
       peak_month = mean_smoothed_abundance >=
-        max_monthly_abundance * seasonal_recurrence_cutoff
+        max_monthly_abundance * seasonal_peak_relative_abundance_cutoff
     ) |>
     summarize(
       n_peak_months = sum(peak_month),
       peak_window_active_samples = sum(
-        monthly_occupancy[peak_month] * n(),
+        monthly_active_samples[peak_month],
         na.rm = TRUE
       ),
       peak_months = paste(month[peak_month], collapse = ","),
       max_monthly_abundance = max(mean_smoothed_abundance, na.rm = TRUE),
       median_monthly_abundance = median(mean_smoothed_abundance, na.rm = TRUE),
-      seasonal_abundance_relative_amplitude = (max_monthly_abundance -
-        median_monthly_abundance) /
-        (max_monthly_abundance + 1e-12),
       seasonal_abundance_peak_to_background = max_monthly_abundance /
         (median_monthly_abundance + 1e-12),
       .groups = "drop"
     )
 
-  annual_peak_summary <-
+  annual_abundance_summary <-
     taxon_time_series |>
     filter(active_observed) |>
     group_by(OTU, year) |>
@@ -479,7 +439,7 @@ classify_activity_patterns <- function(
     ) |>
     group_by(OTU) |>
     summarize(
-      max_single_year_peak_fraction = max(
+      max_single_year_fraction = max(
         annual_total_abundance,
         na.rm = TRUE
       ) /
@@ -494,44 +454,32 @@ classify_activity_patterns <- function(
       occupancy = mean(active_observed, na.rm = TRUE),
       .groups = "drop"
     ) |>
-    left_join(run_summary, by = "OTU") |>
-    left_join(annual_summary, by = "OTU") |>
     left_join(month_summary, by = "OTU") |>
-    left_join(annual_peak_summary, by = "OTU") |>
+    left_join(annual_abundance_summary, by = "OTU") |>
     mutate(
-      max_active_run = replace_na(max_active_run, 0),
-      max_single_year_peak_fraction = replace_na(
-        max_single_year_peak_fraction,
+      max_single_year_fraction = replace_na(
+        max_single_year_fraction,
         1
       ),
       persistent = occupancy >= persistent_cutoff,
-      candidate_seasonal = !persistent &
-        years_detected >= seasonal_min_years &
-        annual_recurrence >= seasonal_recurrence_cutoff &
-        max_single_year_peak_fraction <=
-          seasonal_max_single_year_peak_fraction &
+
+      seasonal = !persistent &
+        occupancy >= seasonal_min_presence_frequency &
         n_peak_months >= seasonal_min_peak_months &
         n_peak_months <= seasonal_max_peak_months &
-        seasonal_abundance_relative_amplitude >=
-          seasonal_abundance_relative_amplitude_cutoff,
+        peak_window_active_samples >=
+          seasonal_min_peak_window_active_samples &
+        max_single_year_fraction <= seasonal_max_single_year_fraction,
 
-      seasonal_temporal_support = occupancy >= seasonal_min_presence_frequency &
-        (max_active_run >= seasonal_min_max_run |
-          peak_window_active_samples >=
-            seasonal_min_peak_window_active_samples),
-
-      seasonal = candidate_seasonal & seasonal_temporal_support,
       episodic_transient = !persistent &
         !seasonal &
-        max_single_year_peak_fraction >=
+        max_single_year_fraction >=
           transient_single_year_dominance_cutoff &
         seasonal_abundance_peak_to_background >=
           transient_peak_to_background_cutoff,
       transient = !persistent &
         !seasonal &
-        (occupancy <= transient_cutoff |
-          episodic_transient |
-          (candidate_seasonal & !seasonal_temporal_support)),
+        (occupancy <= transient_cutoff | episodic_transient),
       activity_pattern = case_when(
         persistent ~ "persistent",
         seasonal ~ "seasonal",
@@ -543,15 +491,11 @@ classify_activity_patterns <- function(
       OTU,
       activity_pattern,
       occupancy,
-      annual_recurrence,
-      years_detected,
-      max_active_run,
       n_peak_months,
       peak_window_active_samples,
       peak_months,
-      seasonal_abundance_relative_amplitude,
       seasonal_abundance_peak_to_background,
-      max_single_year_peak_fraction,
+      max_single_year_fraction,
       episodic_transient
     )
 
@@ -720,15 +664,12 @@ soil_activity_classes <- classify_activity_patterns(
   taxa = colnames(timeseries_rna_soil_shared_dna_presence),
   persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
-  seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_recurrence_cutoff = 0.50,
+  seasonal_peak_relative_abundance_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
-  seasonal_min_max_run = 2,
-  seasonal_min_peak_window_active_samples = 4,
-  seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_max_single_year_peak_fraction = 0.75,
+  seasonal_min_peak_window_active_samples = 3,
+  seasonal_max_single_year_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
   smooth_abundance = TRUE,
@@ -741,15 +682,12 @@ soil_activity_classes_unsmoothed <- classify_activity_patterns(
   taxa = colnames(timeseries_rna_soil_shared_dna_presence),
   persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
-  seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_recurrence_cutoff = 0.50,
+  seasonal_peak_relative_abundance_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
-  seasonal_min_max_run = 2,
-  seasonal_min_peak_window_active_samples = 4,
-  seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_max_single_year_peak_fraction = 0.75,
+  seasonal_min_peak_window_active_samples = 3,
+  seasonal_max_single_year_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
   smooth_abundance = FALSE
@@ -911,15 +849,12 @@ aquatic_activity_classes <- classify_activity_patterns(
   taxa = colnames(timeseries_aquatic_rna_presence),
   persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
-  seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_recurrence_cutoff = 0.50,
+  seasonal_peak_relative_abundance_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
-  seasonal_min_max_run = 2,
-  seasonal_min_peak_window_active_samples = 4,
-  seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_max_single_year_peak_fraction = 0.75,
+  seasonal_min_peak_window_active_samples = 3,
+  seasonal_max_single_year_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
   smooth_abundance = TRUE,
@@ -932,15 +867,12 @@ aquatic_activity_classes_unsmoothed <- classify_activity_patterns(
   taxa = colnames(timeseries_aquatic_rna_presence),
   persistent_cutoff = 0.80,
   transient_cutoff = 0.10,
-  seasonal_min_years = 2,
   seasonal_min_peak_months = 2,
   seasonal_max_peak_months = 4,
-  seasonal_recurrence_cutoff = 0.50,
+  seasonal_peak_relative_abundance_cutoff = 0.50,
   seasonal_min_presence_frequency = 0.05,
-  seasonal_min_max_run = 2,
-  seasonal_min_peak_window_active_samples = 4,
-  seasonal_abundance_relative_amplitude_cutoff = 0.50,
-  seasonal_max_single_year_peak_fraction = 0.75,
+  seasonal_min_peak_window_active_samples = 3,
+  seasonal_max_single_year_fraction = 0.75,
   transient_single_year_dominance_cutoff = 0.75,
   transient_peak_to_background_cutoff = 3,
   smooth_abundance = FALSE
@@ -1791,6 +1723,73 @@ ggsave(
   height = 8,
   units = "in"
 )
+
+shared_taxa_transect_rna_dna <-
+  shared_taxa_summary |>
+  select(
+    OTU,
+    activity_pattern,
+    soil_max_relative_abundance,
+    transect_dna_max_relative_abundance,
+    transect_rna_max_relative_abundance
+  ) |>
+  pivot_longer(
+    cols = c(
+      transect_dna_max_relative_abundance,
+      transect_rna_max_relative_abundance
+    ),
+    names_to = "molecule_type",
+    values_to = "transect_max_relative_abundance"
+  ) |>
+  mutate(
+    molecule_type = recode(
+      molecule_type,
+      transect_dna_max_relative_abundance = "DNA",
+      transect_rna_max_relative_abundance = "RNA"
+    ),
+    molecule_type = factor(molecule_type, levels = c("DNA", "RNA"))
+  )
+
+fig_shared_taxa_soil_vs_transect_rna_dna <-
+  shared_taxa_transect_rna_dna |>
+  ggplot(aes(
+    x = soil_max_relative_abundance,
+    y = transect_max_relative_abundance,
+    color = activity_pattern,
+    shape = molecule_type
+  )) +
+  geom_hline(yintercept = 0.001, color = "grey60") +
+  geom_vline(xintercept = 0.001, color = "grey60") +
+  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75, na.rm = TRUE) +
+  labs(
+    x = "Max. relative abundance\nin soil",
+    y = "Max. relative abundance\nin aquatic transect",
+    shape = "Nucleic acid"
+  ) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_color_manual(values = activity_colors, drop = FALSE) +
+  scale_shape_manual(values = c(DNA = 1, RNA = 16)) +
+  coord_fixed(ratio = 1) +
+  facet_wrap(~activity_pattern, ncol = 2) +
+  guides(
+    color = "none",
+    shape = guide_legend(
+      override.aes = list(color = "black", alpha = 1, size = 3)
+    )
+  ) +
+  theme(legend.position = "bottom")
+
+fig_shared_taxa_soil_vs_transect_rna_dna
+
+ggsave(
+  filename = "shared_taxa_soil_vs_transect_rna_dna.pdf",
+  plot = fig_shared_taxa_soil_vs_transect_rna_dna,
+  path = paths$figures,
+  width = 8,
+  height = 8,
+  units = "in"
+)
 ```
 
 
@@ -1849,6 +1848,73 @@ shared_taxa_summary |>
 
 ggsave(
   filename = "shared_taxa_soil_vs_timeseries_rna.pdf",
+  path = paths$figures,
+  width = 8,
+  height = 8,
+  units = "in"
+)
+
+shared_taxa_timeseries_rna_dna <-
+  shared_taxa_summary |>
+  select(
+    OTU,
+    activity_pattern,
+    soil_max_relative_abundance,
+    timeseries_dna_max_relative_abundance,
+    timeseries_rna_max_relative_abundance
+  ) |>
+  pivot_longer(
+    cols = c(
+      timeseries_dna_max_relative_abundance,
+      timeseries_rna_max_relative_abundance
+    ),
+    names_to = "molecule_type",
+    values_to = "timeseries_max_relative_abundance"
+  ) |>
+  mutate(
+    molecule_type = recode(
+      molecule_type,
+      timeseries_dna_max_relative_abundance = "DNA",
+      timeseries_rna_max_relative_abundance = "RNA"
+    ),
+    molecule_type = factor(molecule_type, levels = c("DNA", "RNA"))
+  )
+
+fig_shared_taxa_soil_vs_timeseries_rna_dna <-
+  shared_taxa_timeseries_rna_dna |>
+  ggplot(aes(
+    x = soil_max_relative_abundance,
+    y = timeseries_max_relative_abundance,
+    color = activity_pattern,
+    shape = molecule_type
+  )) +
+  geom_hline(yintercept = 0.001, color = "grey60") +
+  geom_vline(xintercept = 0.001, color = "grey60") +
+  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75, na.rm = TRUE) +
+  labs(
+    x = "Max. relative abundance\nin soil",
+    y = "Max. relative abundance\nin aquatic time series",
+    shape = "Nucleic acid"
+  ) +
+  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_color_manual(values = activity_colors, drop = FALSE) +
+  scale_shape_manual(values = c(DNA = 1, RNA = 16)) +
+  coord_fixed(ratio = 1) +
+  facet_wrap(~activity_pattern, ncol = 2) +
+  guides(
+    color = "none",
+    shape = guide_legend(
+      override.aes = list(color = "black", alpha = 1, size = 3)
+    )
+  ) +
+  theme(legend.position = "bottom")
+
+fig_shared_taxa_soil_vs_timeseries_rna_dna
+
+ggsave(
+  filename = "shared_taxa_soil_vs_timeseries_rna_dna.pdf",
+  plot = fig_shared_taxa_soil_vs_timeseries_rna_dna,
   path = paths$figures,
   width = 8,
   height = 8,
