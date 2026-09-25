@@ -467,14 +467,12 @@ classify_activity_patterns <- function(
         occupancy >= seasonal_min_presence_frequency &
         n_peak_months >= seasonal_min_peak_months &
         n_peak_months <= seasonal_max_peak_months &
-        peak_window_active_samples >=
-          seasonal_min_peak_window_active_samples &
+        peak_window_active_samples >= seasonal_min_peak_window_active_samples &
         max_single_year_fraction <= seasonal_max_single_year_fraction,
 
       episodic_transient = !persistent &
         !seasonal &
-        max_single_year_fraction >=
-          transient_single_year_dominance_cutoff &
+        max_single_year_fraction >= transient_single_year_dominance_cutoff &
         seasonal_abundance_peak_to_background >=
           transient_peak_to_background_cutoff,
       transient = !persistent &
@@ -1661,6 +1659,8 @@ shared_taxa_summary <-
   left_join(timeseries_dna_max_relative_abundance, by = "OTU") |>
   left_join(timeseries_rna_max_relative_abundance, by = "OTU") |>
   left_join(combined_activity_classes, by = "OTU")
+
+abundance_comparison_limits <- c(0.0001, 1)
 ```
 
 ## Soil versus aquatic transect maximum abundance
@@ -1681,10 +1681,14 @@ shared_taxa_summary |>
     title = "Presence in lake (DNA)"
   ) +
   #annotate("text", x = 10^(-1), y = 10^(-1), label = "DNA", size = 6, adj = 1) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  coord_fixed(ratio = 1) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   facet_wrap(~activity_pattern, ncol = 2)
 
 ggsave(
@@ -1710,10 +1714,14 @@ shared_taxa_summary |>
     title = "Activity in lake (RNA)"
   ) +
   #annotate("text", x = 10^(-1), y = 10^(-1), label = "RNA", size = 6, adj = 1) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  coord_fixed(ratio = 1) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   facet_wrap(~activity_pattern, ncol = 2)
 
 ggsave(
@@ -1750,32 +1758,107 @@ shared_taxa_transect_rna_dna <-
     molecule_type = factor(molecule_type, levels = c("DNA", "RNA"))
   )
 
-fig_shared_taxa_soil_vs_transect_rna_dna <-
+shared_taxa_plot_data <-
   shared_taxa_transect_rna_dna |>
+  filter(
+    is.finite(soil_max_relative_abundance),
+    is.finite(transect_max_relative_abundance),
+    soil_max_relative_abundance > 0,
+    transect_max_relative_abundance > 0
+  )
+
+shared_taxa_point_counts <-
+  shared_taxa_plot_data |>
+  count(
+    activity_pattern,
+    molecule_type,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  group_by(activity_pattern) |>
+  summarise(
+    label = paste0(
+      molecule_type,
+      ": n = ",
+      n,
+      collapse = "\n"
+    ),
+    .groups = "drop"
+  )
+
+fig_shared_taxa_soil_vs_transect_rna_dna <-
+  shared_taxa_plot_data |>
   ggplot(aes(
     x = soil_max_relative_abundance,
     y = transect_max_relative_abundance,
     color = activity_pattern,
-    shape = molecule_type
+    shape = molecule_type,
+    linetype = molecule_type
   )) +
   geom_hline(yintercept = 0.001, color = "grey60") +
   geom_vline(xintercept = 0.001, color = "grey60") +
-  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75, na.rm = TRUE) +
+  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ x,
+    se = FALSE,
+    linewidth = 0.8
+  ) +
+  geom_text(
+    data = shared_taxa_point_counts,
+    aes(
+      x = Inf,
+      y = Inf,
+      label = label
+    ),
+    inherit.aes = FALSE,
+    hjust = 1.1,
+    vjust = 1.1,
+    size = 3,
+    lineheight = 0.95
+  ) +
+  facet_wrap(~activity_pattern, ncol = 2) +
   labs(
     x = "Max. relative abundance\nin soil",
-    y = "Max. relative abundance\nin aquatic transect",
-    shape = "Nucleic acid"
+    y = "Max. relative abundance\nin aquatic transect"
   ) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  scale_shape_manual(values = c(DNA = 1, RNA = 16)) +
-  coord_fixed(ratio = 1) +
-  facet_wrap(~activity_pattern, ncol = 2) +
+  scale_shape_manual(
+    name = "Nucleic acid",
+    breaks = c("DNA", "RNA"),
+    values = c(DNA = 1, RNA = 16)
+  ) +
+  scale_linetype_manual(
+    name = "Nucleic acid",
+    breaks = c("DNA", "RNA"),
+    values = c(DNA = "dashed", RNA = "solid")
+  ) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   guides(
     color = "none",
     shape = guide_legend(
-      override.aes = list(color = "black", alpha = 1, size = 3)
+      order = 1,
+      override.aes = list(
+        color = "black",
+        alpha = 1,
+        size = 3,
+        linewidth = 0.8
+      )
+    ),
+    linetype = guide_legend(
+      order = 1,
+      override.aes = list(
+        color = "black",
+        alpha = 1,
+        size = 3,
+        linewidth = 0.8
+      )
     )
   ) +
   theme(legend.position = "bottom")
@@ -1811,10 +1894,14 @@ shared_taxa_summary |>
     title = "Presence in lake (DNA)"
   ) +
   #annotate("text", x = 10^(-1), y = 10^(-1), label = "DNA", size = 6, adj = 1) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  coord_fixed(ratio = 1) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   facet_wrap(~activity_pattern, ncol = 2)
 
 ggsave(
@@ -1840,10 +1927,14 @@ shared_taxa_summary |>
     title = "Activity in lake (RNA)"
   ) +
   #annotate("text", x = 10^(-1), y = 10^(-1), label = "RNA", size = 6, adj = 1) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  coord_fixed(ratio = 1) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   facet_wrap(~activity_pattern, ncol = 2)
 
 ggsave(
@@ -1880,32 +1971,107 @@ shared_taxa_timeseries_rna_dna <-
     molecule_type = factor(molecule_type, levels = c("DNA", "RNA"))
   )
 
-fig_shared_taxa_soil_vs_timeseries_rna_dna <-
+shared_taxa_timeseries_plot_data <-
   shared_taxa_timeseries_rna_dna |>
+  filter(
+    is.finite(soil_max_relative_abundance),
+    is.finite(timeseries_max_relative_abundance),
+    soil_max_relative_abundance > 0,
+    timeseries_max_relative_abundance > 0
+  )
+
+shared_taxa_timeseries_point_counts <-
+  shared_taxa_timeseries_plot_data |>
+  count(
+    activity_pattern,
+    molecule_type,
+    name = "n",
+    .drop = FALSE
+  ) |>
+  group_by(activity_pattern) |>
+  summarise(
+    label = paste0(
+      molecule_type,
+      ": n = ",
+      n,
+      collapse = "\n"
+    ),
+    .groups = "drop"
+  )
+
+fig_shared_taxa_soil_vs_timeseries_rna_dna <-
+  shared_taxa_timeseries_plot_data |>
   ggplot(aes(
     x = soil_max_relative_abundance,
     y = timeseries_max_relative_abundance,
     color = activity_pattern,
-    shape = molecule_type
+    shape = molecule_type,
+    linetype = molecule_type
   )) +
   geom_hline(yintercept = 0.001, color = "grey60") +
   geom_vline(xintercept = 0.001, color = "grey60") +
-  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75, na.rm = TRUE) +
+  geom_point(alpha = 0.45, size = 2.3, stroke = 0.75) +
+  geom_smooth(
+    method = "lm",
+    formula = y ~ x,
+    se = FALSE,
+    linewidth = 0.8
+  ) +
+  geom_text(
+    data = shared_taxa_timeseries_point_counts,
+    aes(
+      x = Inf,
+      y = Inf,
+      label = label
+    ),
+    inherit.aes = FALSE,
+    hjust = 1.1,
+    vjust = 1.1,
+    size = 3,
+    lineheight = 0.95
+  ) +
+  facet_wrap(~activity_pattern, ncol = 2) +
   labs(
     x = "Max. relative abundance\nin soil",
-    y = "Max. relative abundance\nin aquatic time series",
-    shape = "Nucleic acid"
+    y = "Max. relative abundance\nin aquatic time series"
   ) +
-  scale_x_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
-  scale_y_log10(limits = c(0.0001, 0.1), labels = scales::label_log()) +
+  scale_x_log10(labels = scales::label_log()) +
+  scale_y_log10(labels = scales::label_log()) +
   scale_color_manual(values = activity_colors, drop = FALSE) +
-  scale_shape_manual(values = c(DNA = 1, RNA = 16)) +
-  coord_fixed(ratio = 1) +
-  facet_wrap(~activity_pattern, ncol = 2) +
+  scale_shape_manual(
+    name = "Nucleic acid",
+    breaks = c("DNA", "RNA"),
+    values = c(DNA = 1, RNA = 16)
+  ) +
+  scale_linetype_manual(
+    name = "Nucleic acid",
+    breaks = c("DNA", "RNA"),
+    values = c(DNA = "dashed", RNA = "solid")
+  ) +
+  coord_fixed(
+    ratio = 1,
+    xlim = abundance_comparison_limits,
+    ylim = abundance_comparison_limits
+  ) +
   guides(
     color = "none",
     shape = guide_legend(
-      override.aes = list(color = "black", alpha = 1, size = 3)
+      order = 1,
+      override.aes = list(
+        color = "black",
+        alpha = 1,
+        size = 3,
+        linewidth = 0.8
+      )
+    ),
+    linetype = guide_legend(
+      order = 1,
+      override.aes = list(
+        color = "black",
+        alpha = 1,
+        size = 3,
+        linewidth = 0.8
+      )
     )
   ) +
   theme(legend.position = "bottom")
