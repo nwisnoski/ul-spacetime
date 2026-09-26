@@ -84,14 +84,10 @@ activity_colors <- c(
   transient = "#D55E00",
   seasonal = "#009E73",
   persistent = "#0072B2",
-  unpatterned = "#999999"
+  unpatterned = "#999999",
+  never_active = "#F0E442"
 )
 
-abundance_colors <- c(
-  aggregate_abundance = "#4D4D4D",
-  common_abundance = "#0072B2",
-  rare_abundance = "#CC79A7"
-)
 
 activity_linetypes <- c(
   transient = "dotdash",
@@ -1277,37 +1273,7 @@ shared_abundance_summary <-
     by = c("sample_id" = "sample.id")
   )
 
-shared_abundance_summary |>
-  ggplot(aes(x = date, y = abundance * 100, color = abundance_type)) +
-  geom_line(alpha = 0.9, linewidth = 0.8) +
-  facet_wrap(
-    ~abundance_type,
-    labeller = labeller(
-      abundance_type = c(
-        aggregate_abundance = "All Taxa",
-        common_abundance = "Common Taxa",
-        rare_abundance = "Rare Taxa"
-      )
-    )
-  ) +
-  guides(color = "none", linetype = "none") +
-  labs(
-    x = "",
-    y = "Percent abundance
-from active shared taxa"
-  ) +
-  scale_color_manual(values = abundance_colors, drop = FALSE) +
-  #scale_linetype_manual(values = abundance_linetypes, drop = FALSE) +
-  scale_x_date(date_breaks = "3 months", date_labels = "%b %Y") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-# ggsave(
-#   filename = "percent_contribution_of_active_shared_taxa_in_aquatic_community.pdf",
-#   path = paths$figures,
-#   height = 4,
-#   width = 12,
-#   units = "in"
-# )
 ```
 
 # Percent of shared taxa that are common when present
@@ -2210,11 +2176,11 @@ shared_taxa_filtering <-
   )
 
 sankey_colors <- c(
-  "Persistent in time series" = activity_colors[["persistent"]],
-  "Seasonal in time series" = activity_colors[["seasonal"]],
-  "Transient in time series" = activity_colors[["transient"]],
-  "Unpatterned in time series" = activity_colors[["unpatterned"]],
-  "Not active in time series" = "grey85"
+  "Persistent" = activity_colors[["persistent"]],
+  "Seasonal" = activity_colors[["seasonal"]],
+  "Transient" = activity_colors[["transient"]],
+  "Unpatterned" = activity_colors[["unpatterned"]],
+  "Never active\nin time series" = activity_colors[["never_active"]]
 )
 
 fig_shared_taxa_filtering_sankey <-
@@ -2241,7 +2207,7 @@ fig_shared_taxa_filtering_sankey <-
   geom_text(
     stat = "stratum",
     aes(label = after_stat(stratum)),
-    size = 2.8,
+    size = 2.5,
     decreasing = FALSE
   ) +
   scale_x_discrete(
@@ -2253,15 +2219,9 @@ fig_shared_taxa_filtering_sankey <-
     expand = c(0.08, 0.08)
   ) +
   scale_fill_manual(
-    values = c(
-      "Persistent" = activity_colors[["persistent"]],
-      "Seasonal" = activity_colors[["seasonal"]],
-      "Transient" = activity_colors[["transient"]],
-      "Unpatterned" = activity_colors[["unpatterned"]],
-      "Not active" = "grey85"
-    ),
-    drop = FALSE
-  ) +
+  values = sankey_colors,
+  drop = FALSE
+) +
   labs(
     x = "",
     y = "Number of OTUs",
@@ -2280,8 +2240,8 @@ ggsave(
   filename = "shared_taxa_filtering_sankey.png",
   plot = fig_shared_taxa_filtering_sankey,
   path = paths$figures,
-  width = 10,
-  height = 6,
+  width = 8,
+  height = 8,
   units = "in",
   dpi = 600
 )
